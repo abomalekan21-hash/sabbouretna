@@ -1,0 +1,563 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>سبورتنا</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🖍️</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Baloo+Bhaijaan+2:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root {
+  box-sizing: border-box;
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  color-scheme: light;
+  --page: #DDE4E0;
+  --surface: #F4F7F5;
+  --ink: #1C2925;
+  --ink-soft: #56665F;
+  --line: rgba(28, 41, 37, .14);
+  --board: #2D4A3F;
+  --wood: #8A6342;
+  --wood-dark: #6E4D31;
+  --wood-text: #F6EBDA;
+  --focus: #F5D76E;
+  --warn: #D9A21F;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --page: #0F1513;
+    --surface: #1A2320;
+    --ink: #E3EAE6;
+    --ink-soft: #93A39C;
+    --line: rgba(227, 234, 230, .13);
+  }
+}
+*, *::before, *::after { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--page);
+  color: var(--ink);
+  font-family: "Baloo Bhaijaan 2", "Segoe UI", Tahoma, "Noto Sans Arabic", Arial, sans-serif;
+  -webkit-text-size-adjust: 100%;
+}
+.app { max-width: 1400px; margin: 0 auto; padding: clamp(12px, 2.5vw, 28px) clamp(14px, 3vw, 32px) 28px; }
+.top { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px 24px; margin-bottom: 14px; }
+h1 { margin: 0; font-size: clamp(32px, 4.4vw, 48px); font-weight: 800; line-height: 1; }
+.sub { margin: .4em 0 0; color: var(--ink-soft); font-size: clamp(14px, 1.4vw, 16px); line-height: 1.5; max-width: 46ch; }
+.who { display: flex; align-items: center; gap: 10px 12px; flex-wrap: wrap; }
+.conn { display: inline-flex; align-items: center; gap: 7px; font-size: 14px; color: var(--ink-soft); }
+.conn i { width: 8px; height: 8px; border-radius: 50%; background: #9AA5A0; flex: none; }
+.conn[data-state="on"] i { background: #3BA776; box-shadow: 0 0 0 3px rgba(59, 167, 118, .22); }
+.conn[data-state="wait"] i { background: var(--warn); }
+.people { list-style: none; display: flex; gap: 6px; margin: 0; padding: 0; flex-wrap: wrap; }
+.person {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding-block: 3px; padding-inline: 4px 11px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 999px;
+  font: inherit; font-size: 14px; font-weight: 600; line-height: 1.2; color: var(--ink);
+}
+button.person { cursor: pointer; }
+button.person:hover { border-color: var(--ink-soft); }
+.person .av { width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; background: var(--pc); color: #fff; font-size: 13px; flex: none; }
+.copy {
+  appearance: none; font: inherit; font-size: 14px; font-weight: 700;
+  background: var(--ink); color: var(--page);
+  border: 0; border-radius: 999px; padding: 6px 16px; min-height: 34px; cursor: pointer;
+}
+.copy:focus-visible, .person:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+.notice {
+  margin: 0 0 12px; padding: 10px 14px;
+  background: var(--surface); border: 1px solid var(--line);
+  border-inline-start: 4px solid var(--warn); border-radius: 10px;
+  font-size: 15px; line-height: 1.55;
+}
+.stage {
+  width: min(100%, calc((100vh - 250px) * 1.5));
+  width: min(100%, calc((100svh - 250px) * 1.5));
+  min-width: min(100%, 300px);
+  margin-inline: auto;
+}
+.frame {
+  border: 10px solid var(--wood); border-bottom-width: 4px;
+  border-radius: 12px 12px 3px 3px; background: var(--board);
+  box-shadow: 0 18px 40px -24px rgba(15, 25, 20, .6);
+}
+.board {
+  position: relative; aspect-ratio: 3 / 2; overflow: hidden; border-radius: 2px;
+  background:
+    radial-gradient(ellipse 55% 45% at 28% 38%, rgba(255, 255, 255, .055), transparent 70%),
+    radial-gradient(ellipse 40% 35% at 76% 68%, rgba(255, 255, 255, .04), transparent 70%),
+    var(--board);
+  box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .35), inset 0 0 48px rgba(0, 0, 0, .28);
+}
+canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; cursor: crosshair; }
+.hint {
+  position: absolute; inset: 0; display: grid; place-items: center; margin: 0; padding: 1em;
+  color: rgba(242, 239, 230, .42); font-size: clamp(16px, 2.4vw, 26px); font-weight: 600;
+  text-align: center; pointer-events: none; transition: opacity .3s ease;
+}
+.hint.gone { opacity: 0; }
+.cursors { position: absolute; inset: 0; pointer-events: none; }
+.cursor { position: absolute; width: 0; height: 0; transition: left .06s linear, top .06s linear; }
+.cursor .dot {
+  position: absolute; width: 12px; height: 12px; left: -6px; top: -6px;
+  border-radius: 50%; background: var(--pc); border: 2px solid #fff; transition: transform .12s ease;
+}
+.cursor.drawing .dot { transform: scale(1.4); }
+.cursor .tag {
+  position: absolute; top: 9px; left: 9px; white-space: nowrap;
+  background: var(--pc); color: #fff; font-size: 12px; font-weight: 600; line-height: 1.6;
+  padding: 0 8px; border-radius: 999px;
+}
+.tray {
+  position: relative; margin-inline: -10px; padding: 10px 14px 12px;
+  background: linear-gradient(var(--wood) 0 7px, var(--wood-dark) 7px);
+  border-radius: 5px 5px 14px 14px;
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 16px;
+  box-shadow: 0 16px 26px -18px rgba(15, 25, 20, .75);
+}
+.group { display: flex; align-items: center; flex-wrap: wrap; gap: 2px; }
+.tool {
+  appearance: none; border: 0; background: none; margin: 0; padding: 0;
+  width: 44px; height: 44px; display: grid; place-items: center;
+  border-radius: 9px; cursor: pointer; color: var(--wood-text);
+}
+.tool:focus-visible, .act:focus-visible, .confirm button:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.chalk i {
+  display: block; width: 32px; height: 11px; border-radius: 6px 3px 3px 6px; background: var(--c);
+  box-shadow: inset 0 -3px 0 rgba(0, 0, 0, .13), inset 0 2px 0 rgba(255, 255, 255, .45), 0 2px 0 rgba(0, 0, 0, .28);
+  transform: rotate(var(--r, 0deg)); transition: transform .15s ease, box-shadow .15s ease;
+}
+.chalk[aria-pressed="true"] i {
+  transform: translateY(-7px) rotate(var(--r, 0deg));
+  box-shadow: inset 0 -3px 0 rgba(0, 0, 0, .13), inset 0 2px 0 rgba(255, 255, 255, .45), 0 8px 5px -3px rgba(0, 0, 0, .4);
+}
+.size i { display: block; border-radius: 50%; width: var(--d); height: var(--d); background: var(--cur, #F2EFE6); }
+.size[aria-pressed="true"] { background: rgba(0, 0, 0, .25); }
+.eraser i {
+  display: block; width: 30px; height: 16px; border-radius: 3px;
+  background: linear-gradient(#D7B07E 0 55%, #4E5458 55%);
+  box-shadow: 0 2px 0 rgba(0, 0, 0, .3); transform: rotate(-6deg); transition: transform .15s ease;
+}
+.eraser[aria-pressed="true"] i { transform: translateY(-6px) rotate(-6deg); box-shadow: 0 8px 5px -3px rgba(0, 0, 0, .4); }
+.sep { width: 1px; height: 26px; background: rgba(255, 255, 255, .18); margin-inline: 6px; }
+.act {
+  appearance: none; border: 0; margin: 0; font: inherit; font-size: 15px; font-weight: 600;
+  color: var(--wood-text); background: rgba(0, 0, 0, .2);
+  padding: 6px 14px; min-height: 40px; border-radius: 9px; cursor: pointer;
+}
+.act:hover { background: rgba(0, 0, 0, .32); }
+.actions { gap: 8px; }
+.confirm {
+  position: absolute; bottom: calc(100% + 10px); inset-inline-end: 10px;
+  width: min(300px, calc(100vw - 40px));
+  background: var(--surface); color: var(--ink);
+  border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px;
+  box-shadow: 0 14px 30px -12px rgba(0, 0, 0, .4); z-index: 5;
+}
+.confirm p { margin: 0 0 10px; font-size: 15px; line-height: 1.5; }
+.confirm .row { display: flex; gap: 8px; }
+.confirm button { appearance: none; font: inherit; font-size: 15px; font-weight: 600; padding: 6px 14px; min-height: 38px; border-radius: 9px; cursor: pointer; }
+.confirm .yes { background: #C2413A; color: #fff; border: 1px solid #C2413A; }
+.confirm .no { background: transparent; color: var(--ink); border: 1px solid var(--line); }
+[hidden] { display: none !important; }
+@media (max-width: 560px) { .tray { justify-content: center; } .sep { display: none; } }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition: none !important; } }
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="top">
+    <div>
+      <h1>سبورتنا</h1>
+      <p class="sub">ابعت الرابط لصاحبك، وأول ما يفتحه بترسموا مع بعض.</p>
+    </div>
+    <div class="who">
+      <span class="conn" id="conn" data-state="wait"><i></i><span id="conn-text">عم نتصل…</span></span>
+      <ul class="people" id="people" aria-label="مين على السبورة"></ul>
+      <button type="button" class="copy" id="copy">انسخ الرابط</button>
+    </div>
+  </header>
+
+  <p class="notice" id="notice" role="status" hidden></p>
+
+  <main class="stage">
+    <div class="frame">
+      <div class="board" id="board">
+        <canvas id="cv" aria-label="لوحة الرسم"></canvas>
+        <div class="cursors" id="cursors" aria-hidden="true"></div>
+        <p class="hint" id="hint">اختار طبشورة من تحت وابدأ ارسم</p>
+      </div>
+    </div>
+    <div class="tray" role="toolbar" aria-label="أدوات الرسم">
+      <div class="group" id="chalks"></div>
+      <div class="group">
+        <div class="group" id="sizes"></div>
+        <span class="sep" aria-hidden="true"></span>
+        <button type="button" class="tool eraser" id="eraser" aria-pressed="false" aria-label="ممحاة" title="ممحاة"><i></i></button>
+      </div>
+      <div class="group actions">
+        <button type="button" class="act" id="undo" title="تراجع (Ctrl+Z)">تراجع</button>
+        <button type="button" class="act" id="clear" aria-expanded="false" aria-controls="confirm">امسح السبورة</button>
+      </div>
+      <div class="confirm" id="confirm" role="dialog" aria-label="تأكيد المسح" hidden>
+        <p>رح تنمسح الرسمة عند الكل. متأكد؟</p>
+        <div class="row">
+          <button type="button" class="yes" id="confirm-yes">امسحها</button>
+          <button type="button" class="no" id="confirm-no">لا، خليها</button>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<script src="/socket.io/socket.io.js"></script>
+<script>
+(() => {
+  'use strict';
+
+  const W = 1500, H = 1000;
+  const CHALKS = [
+    { c: '#F2EFE6', n: 'طبشورة بيضا', r: -4 },
+    { c: '#F5D76E', n: 'طبشورة صفرا', r: 3 },
+    { c: '#F2A0BE', n: 'طبشورة زهرية', r: -2 },
+    { c: '#93CFEE', n: 'طبشورة زرقا', r: 5 },
+    { c: '#A9DFA0', n: 'طبشورة خضرا', r: -5 },
+    { c: '#F4A96A', n: 'طبشورة برتقانية', r: 2 }
+  ];
+  const SIZES = [
+    { w: 5, n: 'خط رفيع', d: 6 },
+    { w: 10, n: 'خط وسط', d: 11 },
+    { w: 22, n: 'خط عريض', d: 18 }
+  ];
+
+  const $ = (id) => document.getElementById(id);
+  const rand = (n) => {
+    const a = new Uint8Array(n); crypto.getRandomValues(a);
+    let s = ''; for (const b of a) s += 'abcdefghijklmnopqrstuvwxyz0123456789'[b % 36];
+    return s;
+  };
+  const store = {
+    get(k) { try { return localStorage.getItem(k); } catch (_) { return null; } },
+    set(k, v) { try { localStorage.setItem(k, v); } catch (_) {} }
+  };
+
+  // ---------- الهوية والغرفة ----------
+  const m = location.pathname.match(/^\/r\/([a-zA-Z0-9_-]{1,40})\/?$/);
+  const room = m ? m[1] : 'main';
+  let cid = store.get('sab_cid');
+  if (!cid || !/^[a-z0-9]{4,24}$/.test(cid)) { cid = rand(12); store.set('sab_cid', cid); }
+  const savedName = store.get('sab_name') || '';
+
+  // ---------- عناصر الصفحة ----------
+  const cv = $('cv'), vctx = cv.getContext('2d');
+  const off = document.createElement('canvas'), octx = off.getContext('2d');
+  const hintEl = $('hint'), cursorsEl = $('cursors'), noticeEl = $('notice');
+  const connEl = $('conn'), connText = $('conn-text'), peopleEl = $('people');
+  const confirmEl = $('confirm'), clearBtn = $('clear');
+
+  // ---------- الحالة ----------
+  const tool = { color: CHALKS[0].c, size: 1, eraser: false };
+  let committed = [];                 // الخطوط المعتمدة بترتيب السيرفر
+  const committedIds = new Set();
+  const live = new Map();             // خطوط الآخرين اللي لسا عم تنرسم
+  const myPending = new Map();        // خطوطي اللي خلصت ولسا السيرفر ما اعتمدها
+  let cur = null, sentIdx = 0, activePointer = null;
+  let me = null, users = [];
+  const cursorEls = new Map();
+  let scale = 1, fullRedraw = true, frameDirty = true;
+  let lastCursor = null, cursorSent = null;
+
+  // ---------- الأدوات ----------
+  CHALKS.forEach((ch) => {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'tool chalk';
+    b.style.setProperty('--c', ch.c); b.style.setProperty('--r', ch.r + 'deg');
+    b.setAttribute('aria-label', ch.n); b.title = ch.n; b.innerHTML = '<i></i>';
+    b.addEventListener('click', () => { tool.color = ch.c; tool.eraser = false; syncTools(); });
+    $('chalks').appendChild(b); ch.el = b;
+  });
+  SIZES.forEach((sz, i) => {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'tool size';
+    b.style.setProperty('--d', sz.d + 'px');
+    b.setAttribute('aria-label', sz.n); b.title = sz.n; b.innerHTML = '<i></i>';
+    b.addEventListener('click', () => { tool.size = i; syncTools(); });
+    $('sizes').appendChild(b); sz.el = b;
+  });
+  $('eraser').addEventListener('click', () => { tool.eraser = !tool.eraser; syncTools(); });
+  function syncTools() {
+    for (const ch of CHALKS) ch.el.setAttribute('aria-pressed', String(!tool.eraser && tool.color === ch.c));
+    SIZES.forEach((sz, i) => {
+      sz.el.setAttribute('aria-pressed', String(tool.size === i));
+      sz.el.style.setProperty('--cur', tool.eraser ? '#B9C2BD' : tool.color);
+    });
+    $('eraser').setAttribute('aria-pressed', String(tool.eraser));
+  }
+  syncTools();
+
+  function showNotice(t) { noticeEl.textContent = t || ''; noticeEl.hidden = !t; }
+
+  // ---------- الرسم على الكانفاس ----------
+  function resize() {
+    const r = cv.getBoundingClientRect(); if (!r.width) return;
+    const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+    const pw = Math.max(1, Math.round(r.width * dpr)), ph = Math.max(1, Math.round(r.height * dpr));
+    if (cv.width !== pw || cv.height !== ph) {
+      cv.width = off.width = pw; cv.height = off.height = ph;
+      scale = pw / W; fullRedraw = true; frameDirty = true;
+    }
+  }
+  new ResizeObserver(resize).observe(cv);
+  resize();
+
+  function drawStroke(ctx, s) {
+    const p = s.p, n = p.length; if (n < 2) return;
+    ctx.globalCompositeOperation = s.e ? 'destination-out' : 'source-over';
+    ctx.globalAlpha = s.e ? 1 : 0.94;
+    ctx.strokeStyle = ctx.fillStyle = s.e ? '#000' : s.c;
+    ctx.lineWidth = s.w; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    if (n === 2) { ctx.beginPath(); ctx.arc(p[0], p[1], s.w / 2, 0, Math.PI * 2); ctx.fill(); return; }
+    ctx.beginPath(); ctx.moveTo(p[0], p[1]);
+    for (let i = 2; i < n - 2; i += 2) ctx.quadraticCurveTo(p[i], p[i + 1], (p[i] + p[i + 2]) / 2, (p[i + 1] + p[i + 3]) / 2);
+    ctx.lineTo(p[n - 2], p[n - 1]);
+    ctx.stroke();
+  }
+  function redrawCommitted() {
+    octx.setTransform(1, 0, 0, 1, 0, 0);
+    octx.globalCompositeOperation = 'source-over';
+    octx.clearRect(0, 0, off.width, off.height);
+    octx.setTransform(scale, 0, 0, scale, 0, 0);
+    for (const s of committed) drawStroke(octx, s);
+  }
+  function appendCommitted(s) {
+    if (fullRedraw) return;
+    octx.setTransform(scale, 0, 0, scale, 0, 0);
+    drawStroke(octx, s);
+  }
+  function frame() {
+    requestAnimationFrame(frame);
+    if (fullRedraw) { fullRedraw = false; redrawCommitted(); frameDirty = true; }
+    if (!frameDirty) return;
+    frameDirty = false;
+    vctx.setTransform(1, 0, 0, 1, 0, 0);
+    vctx.globalCompositeOperation = 'source-over'; vctx.globalAlpha = 1;
+    vctx.clearRect(0, 0, cv.width, cv.height);
+    vctx.drawImage(off, 0, 0);
+    vctx.setTransform(scale, 0, 0, scale, 0, 0);
+    for (const s of live.values()) drawStroke(vctx, s);
+    for (const s of myPending.values()) drawStroke(vctx, s);
+    if (cur) drawStroke(vctx, cur);
+    hintEl.classList.toggle('gone', committed.length + live.size + myPending.size + (cur ? 1 : 0) > 0);
+  }
+  requestAnimationFrame(frame);
+
+  // ---------- الاتصال ----------
+  const socket = io({ auth: { room, clientId: cid, name: savedName } });
+
+  socket.on('connect', () => { setConn(); showNotice(''); });
+  socket.on('disconnect', () => setConn());
+  socket.on('connect_error', () => setConn());
+  socket.on('full', () => showNotice('السيرفر مليان لوحات هلأ. جرب كمان شوي.'));
+
+  socket.on('init', (d) => {
+    me = d.you;
+    committed = Array.isArray(d.strokes) ? d.strokes : [];
+    committedIds.clear(); for (const s of committed) committedIds.add(s.id);
+    live.clear(); for (const s of (d.live || [])) live.set(s.id, { ...s, p: s.p.slice() });
+    myPending.clear();
+    users = d.users || [];
+    renderPeople();
+    fullRedraw = true; frameDirty = true;
+  });
+  socket.on('users', (list) => { users = Array.isArray(list) ? list : []; renderPeople(); pruneCursors(); });
+  socket.on('stroke:start', (s) => { live.set(s.id, { ...s, p: s.p.slice() }); frameDirty = true; });
+  socket.on('stroke:points', (d) => {
+    const s = live.get(d.id); if (!s) return;
+    for (const v of d.p) s.p.push(v);
+    frameDirty = true;
+  });
+  socket.on('stroke:commit', (s) => {
+    live.delete(s.id); myPending.delete(s.id);
+    if (!committedIds.has(s.id)) { committed.push(s); committedIds.add(s.id); appendCommitted(s); }
+    frameDirty = true;
+  });
+  socket.on('stroke:remove', ({ id }) => {
+    if (!committedIds.has(id)) return;
+    committedIds.delete(id);
+    committed = committed.filter((s) => s.id !== id);
+    fullRedraw = true;
+  });
+  socket.on('cleared', () => { committed = []; committedIds.clear(); fullRedraw = true; });
+  socket.on('cursor', (d) => renderCursor(d));
+
+  function setConn() {
+    if (socket.connected) {
+      connEl.dataset.state = 'on';
+      const others = users.filter((u) => !me || u.id !== me.id).length;
+      connText.textContent = others > 0 ? 'متصلين مع بعض' : 'لحالك هلأ، ابعت الرابط';
+    } else {
+      connEl.dataset.state = 'wait';
+      connText.textContent = 'عم نتصل…';
+    }
+  }
+
+  // ---------- الناس والمؤشرات ----------
+  function renderPeople() {
+    const frag = document.createDocumentFragment();
+    const mine = users.find((u) => me && u.id === me.id) || me;
+    if (mine) {
+      const b = document.createElement('button');
+      b.type = 'button'; b.className = 'person'; b.title = 'غيّر اسمك';
+      b.style.setProperty('--pc', mine.color);
+      const av = document.createElement('span'); av.className = 'av'; av.textContent = '✎';
+      const t = document.createElement('span'); t.textContent = 'إنت: ' + mine.name;
+      b.append(av, t);
+      b.addEventListener('click', rename);
+      const li = document.createElement('li'); li.appendChild(b); frag.appendChild(li);
+    }
+    for (const u of users) {
+      if (me && u.id === me.id) continue;
+      const li = document.createElement('li'); li.className = 'person';
+      li.style.setProperty('--pc', u.color);
+      const av = document.createElement('span'); av.className = 'av'; av.textContent = (u.name || '؟').trim().charAt(0);
+      const t = document.createElement('span'); t.textContent = u.name;
+      li.append(av, t); frag.appendChild(li);
+    }
+    peopleEl.replaceChildren(frag);
+    setConn();
+  }
+  function rename() {
+    const current = (me && me.name) || '';
+    const n = window.prompt('شو بدك اسمك يظهر؟', current);
+    if (n === null) return;
+    const name = n.trim().slice(0, 24);
+    if (!name) return;
+    store.set('sab_name', name);
+    socket.auth.name = name;
+    if (me) me.name = name;
+    socket.emit('rename', name);
+  }
+  function renderCursor(d) {
+    if (!d || !d.sid) return;
+    let el = cursorEls.get(d.sid);
+    if (d.x === null || d.x === undefined) { if (el) { el.remove(); cursorEls.delete(d.sid); } return; }
+    const u = users.find((x) => x.id === d.sid);
+    if (!el) {
+      el = document.createElement('div'); el.className = 'cursor';
+      const dot = document.createElement('span'); dot.className = 'dot';
+      const tag = document.createElement('span'); tag.className = 'tag';
+      el.append(dot, tag); cursorsEl.appendChild(el); cursorEls.set(d.sid, el);
+    }
+    el.style.setProperty('--pc', u ? u.color : '#3D8BD9');
+    el.lastChild.textContent = u ? u.name : 'حدا';
+    el.style.left = (d.x / W * 100) + '%';
+    el.style.top = (d.y / H * 100) + '%';
+    el.classList.toggle('drawing', !!d.drawing);
+  }
+  function pruneCursors() {
+    for (const [sid, el] of cursorEls) if (!users.some((u) => u.id === sid)) { el.remove(); cursorEls.delete(sid); }
+  }
+
+  // ---------- الرسم بالماوس/اللمس ----------
+  function toLogical(e) {
+    const r = cv.getBoundingClientRect();
+    const x = Math.round((e.clientX - r.left) / r.width * W);
+    const y = Math.round((e.clientY - r.top) / r.height * H);
+    return [Math.max(-200, Math.min(W + 200, x)), Math.max(-200, Math.min(H + 200, y))];
+  }
+  function beginStroke(x, y) {
+    const base = SIZES[tool.size].w;
+    cur = { id: rand(10), c: tool.color, w: tool.eraser ? base * 3 : base, e: tool.eraser, p: [x, y] };
+    sentIdx = 2;
+    socket.emit('stroke:start', { id: cur.id, c: cur.c, w: cur.w, e: cur.e, p: [x, y] });
+    frameDirty = true;
+  }
+  function flushPoints() {
+    if (!cur || cur.p.length <= sentIdx) return;
+    while (sentIdx < cur.p.length) {
+      const chunk = cur.p.slice(sentIdx, sentIdx + 1000);
+      socket.emit('stroke:points', { id: cur.id, p: chunk });
+      sentIdx += chunk.length;
+    }
+  }
+  function endStroke() {
+    if (!cur) return;
+    flushPoints();
+    socket.emit('stroke:end', { id: cur.id });
+    myPending.set(cur.id, cur);
+    cur = null; frameDirty = true;
+  }
+  function addPoint(x, y) {
+    const p = cur.p, lx = p[p.length - 2], ly = p[p.length - 1];
+    if ((x - lx) * (x - lx) + (y - ly) * (y - ly) < 4) return;
+    p.push(x, y);
+    if (p.length >= 19000) { endStroke(); beginStroke(x, y); }
+  }
+
+  cv.addEventListener('pointerdown', (e) => {
+    if (cur || (e.pointerType === 'mouse' && e.button !== 0)) return;
+    e.preventDefault();
+    closeConfirm();
+    try { cv.setPointerCapture(e.pointerId); } catch (_) {}
+    activePointer = e.pointerId;
+    const [x, y] = toLogical(e);
+    lastCursor = { x, y, drawing: true };
+    beginStroke(x, y);
+  });
+  cv.addEventListener('pointermove', (e) => {
+    const [x, y] = toLogical(e);
+    lastCursor = { x, y, drawing: !!cur };
+    if (!cur || e.pointerId !== activePointer) return;
+    const evs = (typeof e.getCoalescedEvents === 'function' && e.getCoalescedEvents()) || [];
+    for (const ev of (evs.length ? evs : [e])) { if (!cur) break; const [px, py] = toLogical(ev); addPoint(px, py); }
+    frameDirty = true;
+  });
+  const finish = (e) => {
+    if (e.pointerId !== activePointer) return;
+    endStroke(); activePointer = null;
+    lastCursor = e.pointerType === 'mouse' ? { ...(lastCursor || { x: 0, y: 0 }), drawing: false } : { x: null };
+  };
+  cv.addEventListener('pointerup', finish);
+  cv.addEventListener('pointercancel', finish);
+  cv.addEventListener('lostpointercapture', finish);
+  cv.addEventListener('pointerleave', () => { if (!cur) lastCursor = { x: null }; });
+  cv.addEventListener('contextmenu', (e) => e.preventDefault());
+
+  // بث النقاط والمؤشر بدفعات صغيرة (حوالي 30 مرة بالثانية)
+  setInterval(() => {
+    flushPoints();
+    if (lastCursor && lastCursor !== cursorSent && socket.connected) {
+      cursorSent = lastCursor;
+      socket.volatile.emit('cursor', lastCursor.x === null ? { x: null } : lastCursor);
+    }
+  }, 33);
+
+  // ---------- تراجع ومسح ----------
+  function undo() { socket.emit('undo'); }
+  $('undo').addEventListener('click', undo);
+  function openConfirm() { confirmEl.hidden = false; clearBtn.setAttribute('aria-expanded', 'true'); $('confirm-no').focus(); }
+  function closeConfirm() { if (confirmEl.hidden) return; confirmEl.hidden = true; clearBtn.setAttribute('aria-expanded', 'false'); }
+  clearBtn.addEventListener('click', () => { if (confirmEl.hidden) openConfirm(); else closeConfirm(); });
+  $('confirm-no').addEventListener('click', () => { closeConfirm(); clearBtn.focus(); });
+  $('confirm-yes').addEventListener('click', () => { closeConfirm(); socket.emit('clear'); });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') closeConfirm();
+    if ((e.ctrlKey || e.metaKey) && !e.shiftKey && (e.key === 'z' || e.key === 'Z' || e.code === 'KeyZ')) { e.preventDefault(); undo(); }
+  });
+
+  // ---------- نسخ الرابط ----------
+  $('copy').addEventListener('click', async () => {
+    const btn = $('copy');
+    try { await navigator.clipboard.writeText(location.href); btn.textContent = 'انسخ ✓'; }
+    catch (_) { window.prompt('انسخ الرابط من هون:', location.href); }
+    setTimeout(() => { btn.textContent = 'انسخ الرابط'; }, 1800);
+  });
+})();
+</script>
+</body>
+</html>
