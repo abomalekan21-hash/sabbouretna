@@ -1,4 +1,4 @@
-// سبورتنا: سيرفر رسم مشترك لحظي (Express + Socket.io)
+// منقوشة: سبورة رسم مشتركة لحظية + ألعاب (Express + Socket.io)
 // التشغيل: npm install ثم npm start  ← http://localhost:3000
 
 const path = require('path');
@@ -11,13 +11,13 @@ const { Server } = require('socket.io');
 const PORT = process.env.PORT || 3000;
 const DATA_FILE = path.join(__dirname, 'data', 'boards.json');
 
-// أبعاد اللوحة المنطقية (نفسها عند كل الأجهزة)
+// أبعاد اللوحة المنطقية (نفسها عند كل الأجهزة). صارت أطول لتحت: 1500×2000
 const W = 1500;
-const H = 1000;
+const H = 2000;
 
 const LIMITS = {
   rooms: 200,        // أقصى عدد لوحات بالذاكرة
-  strokes: 8000,     // أقصى عدد خطوط باللوحة الواحدة
+  strokes: 8000,     // أقصى عدد خطوط وإيموجي باللوحة الواحدة
   points: 20000,     // أقصى عدد أرقام (x,y) بالخط الواحد
   batch: 2000,       // أقصى دفعة نقاط بالرسالة الواحدة
   livePerUser: 4,
@@ -29,13 +29,22 @@ const ID_RE = /^[a-z0-9]{4,24}$/;
 const HEX = /^#[0-9a-fA-F]{6}$/;
 const COLORS = ['#E0607E', '#3D8BD9', '#D98A1F', '#2E9E6B', '#9A6AD6', '#D35A3A', '#1F9BA8', '#B5512F'];
 
+// الإيموجي اللي بتنحط على السبورة (لازم تكون نفس القائمة اللي بـ public/board.html)
+const STAMPS = new Set(['😂', '😢', '😠', '😍', '😮', '😎', '🤔', '🥳', '👍', '👏', '❤️', '⭐', '🔥', '💯']);
+
+// لعبة الذاكرة: كم زوج، ومن وين بننقّي الإيموجي
+const MEM_PAIRS = 10;
+const MEM_POOL = ['🐶', '🐱', '🐭', '🐰', '🦊', '🐻', '🐼', '🐸', '🐵', '🦁', '🐯', '🐮', '🐷', '🐔', '🐧',
+  '🦋', '🍎', '🍉', '🍇', '🍓', '🍌', '🍕', '🍩', '⚽', '🚗', '🌙', '🌈', '🎈', '🎁', '🚀'];
+
 // ---------- التحقق من البيانات القادمة من المتصفح ----------
 function cleanPts(p, max) {
   if (!Array.isArray(p) || p.length % 2 !== 0 || p.length > max) return null;
   const out = new Array(p.length);
   for (let i = 0; i < p.length; i++) {
     const v = p[i];
-    if (typeof v !== 'number' || !Number.isFinite(v) || v < -300 || v > W + 300) return null;
+    const lim = i % 2 ? H : W; // الزوجي x والفردي y
+    if (typeof v !== 'number' || !Number.isFinite(v) || v < -300 || v > lim + 300) return null;
     out[i] = Math.round(v);
   }
   return out;
@@ -44,29 +53,92 @@ function clampW(w) {
   const n = Number(w);
   return Number.isFinite(n) ? Math.min(90, Math.max(1, n)) : 6;
 }
+function clampStamp(w) {
+  const n = Number(w);
+  return Number.isFinite(n) ? Math.min(240, Math.max(24, Math.round(n))) : 90;
+}
 function cleanStroke(s) {
   if (!s || typeof s !== 'object' || !ID_RE.test(s.id)) return null;
   const p = cleanPts(s.p, LIMITS.points);
   if (!p || p.length < 2) return null;
-  return {
-    id: s.id,
-    by: typeof s.by === 'string' && ID_RE.test(s.by) ? s.by : 'unknown',
-    c: HEX.test(s.c) ? s.c : '#F2EFE6',
-    w: clampW(s.w),
-    e: s.e === true,
-    p
-  };
+  const by = typeof s.by === 'string' && ID_RE.test(s.by) ? s.by : 'unknown';
+  if (s.m !== undefined) {
+    if (!STAMPS.has(s.m)) return null;
+    return { id: s.id, by, m: s.m, w: clampStamp(s.w), p: p.slice(0, 2) };
+  }
+  return { id: s.id, by, c: HEX.test(s.c) ? s.c : '#F2EFE6', w: clampW(s.w), e: s.e === true, p };
 }
 function cleanName(n) {
   if (typeof n !== 'string') return '';
   return n.replace(/[\u0000-\u001F\u007F\u200B-\u200F\u202A-\u202E\u2066-\u2069]/g, '').trim().slice(0, LIMITS.name);
 }
+function shuffle(a) {
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = crypto.randomInt(i + 1);
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+// ---------- الألعاب ----------
+const XO_LINES = [[0, 1, 2], [3, 4, 5], [6, 7, 8], [0, 3, 6], [1, 4, 7], [2, 5, 8], [0, 4, 8], [2, 4, 6]];
+
+function newXo() {
+  return {
+    cells: Array(9).fill(''),
+    turn: 'X',
+    seats: { X: null, O: null },   // { cid, pid, name }
+    winner: null,                  // 'X' | 'O' | 'draw'
+    line: null,
+    score: { X: 0, O: 0, draw: 0 }
+  };
+}
+function publicXo(b) {
+  const x = b.xo;
+  const seat = (k) => (x.seats[k] ? { pid: x.seats[k].pid, name: x.seats[k].name } : null);
+  return { cells: x.cells, turn: x.turn, winner: x.winner, line: x.line, score: x.score, seats: { X: seat('X'), O: seat('O') } };
+}
+
+function newMem() {
+  const picks = shuffle(MEM_POOL.slice()).slice(0, MEM_PAIRS);
+  return {
+    cards: shuffle([...picks, ...picks]),
+    matched: Array(MEM_PAIRS * 2).fill(false),
+    open: [],             // الكروت المقلوبة هلأ (واحد أو اثنين)
+    lock: null,           // مين عم يقلب هلأ { cid, pid, name }
+    moves: 0,
+    scores: new Map(),    // cid -> { pid, name, n }
+    round: 0,
+    timer: null
+  };
+}
+function publicMem(b) {
+  const m = b.mem;
+  return {
+    // الكروت المخفية بتوصل null، فما حدا بيقدر يغشّ من المتصفح
+    faces: m.cards.map((c, i) => (m.matched[i] || m.open.includes(i) ? c : null)),
+    matched: m.matched,
+    open: m.open,
+    lock: m.lock ? { pid: m.lock.pid, name: m.lock.name } : null,
+    moves: m.moves,
+    pairs: MEM_PAIRS,
+    found: m.matched.filter(Boolean).length / 2,
+    scores: [...m.scores.values()]
+      .map((s) => ({ pid: s.pid, name: s.name, n: s.n }))
+      .sort((a, c) => c.n - a.n)
+  };
+}
 
 // ---------- اللوحات ----------
-const boards = new Map(); // room -> { strokes, live, users, guestN, colorN }
+const boards = new Map(); // room -> board
 
 function newBoard(strokes) {
-  return { strokes: strokes || [], live: new Map(), users: new Map(), guestN: 0, colorN: 0 };
+  return {
+    strokes: strokes || [], live: new Map(), users: new Map(), guestN: 0, colorN: 0,
+    pids: new Map(),   // cid -> رقم عام للاعب (ما بنكشف الـ cid للباقيين)
+    xo: newXo(),
+    mem: newMem()
+  };
 }
 function getBoard(room) {
   let b = boards.get(room);
@@ -136,35 +208,53 @@ io.on('connection', (socket) => {
     return;
   }
 
+  let pid = b.pids.get(clientId);
+  if (!pid) {
+    pid = crypto.randomBytes(5).toString('hex');
+    b.pids.set(clientId, pid);
+  }
+
   socket.join(room);
   const user = {
     id: socket.id,
+    cid: clientId, // ما بينبعت للباقيين
     name: cleanName(auth.name) || ('رسّام ' + (++b.guestN)),
     color: COLORS[b.colorN++ % COLORS.length]
   };
   b.users.set(socket.id, user);
 
+  const isHere = (cid) => [...b.users.values()].some((u) => u.cid === cid);
+  const othersHere = () => [...b.users.values()].some((u) => u.cid !== clientId);
+  const tell = (game, text) => socket.emit('game:msg', { game, text });
+
   socket.emit('init', {
-    you: { id: user.id, name: user.name, color: user.color },
+    you: { id: user.id, name: user.name, color: user.color, pid },
     strokes: b.strokes,
     live: [...b.live.values()],
-    users: publicUsers(b)
+    users: publicUsers(b),
+    xo: publicXo(b),
+    mem: publicMem(b)
   });
   socket.to(room).emit('users', publicUsers(b));
 
   const mineLive = new Set();
 
-  function commit(id) {
-    mineLive.delete(id);
-    const s = b.live.get(id);
-    if (!s) return;
-    b.live.delete(id);
+  function addCommitted(s) {
     b.strokes.push(s);
     if (b.strokes.length > LIMITS.strokes) b.strokes.splice(0, b.strokes.length - LIMITS.strokes);
     io.to(room).emit('stroke:commit', s);
     scheduleSave();
   }
 
+  function commit(id) {
+    mineLive.delete(id);
+    const s = b.live.get(id);
+    if (!s) return;
+    b.live.delete(id);
+    addCommitted(s);
+  }
+
+  // ---------- الرسم ----------
   socket.on('stroke:start', (d) => {
     if (!d || !ID_RE.test(d.id) || b.live.has(d.id) || mineLive.size >= LIMITS.livePerUser) return;
     const p = cleanPts(d.p, LIMITS.batch);
@@ -188,7 +278,15 @@ io.on('connection', (socket) => {
     if (d && mineLive.has(d.id)) commit(d.id);
   });
 
-  // تراجع: يشيل آخر خط رسمه نفس الشخص (حتى لو عمل تحديث للصفحة)
+  // إيموجي على السبورة
+  socket.on('stamp', (d) => {
+    if (!d || !ID_RE.test(d.id) || !STAMPS.has(d.m)) return;
+    const p = cleanPts(d.p, 2);
+    if (!p || p.length !== 2) return;
+    addCommitted({ id: d.id, by: clientId, m: d.m, w: clampStamp(d.w), p });
+  });
+
+  // تراجع: يشيل آخر خط أو إيموجي حطّه نفس الشخص (حتى لو عمل تحديث للصفحة)
   socket.on('undo', () => {
     for (let i = b.strokes.length - 1; i >= 0; i--) {
       if (b.strokes[i].by === clientId) {
@@ -220,11 +318,114 @@ io.on('connection', (socket) => {
     });
   });
 
+  // ---------- إكس أو ----------
+  socket.on('xo:move', (i) => {
+    const x = b.xo;
+    if (!Number.isInteger(i) || i < 0 || i > 8 || x.winner || x.cells[i]) return;
+    const k = x.turn;
+    const seat = x.seats[k];
+    if (seat && seat.cid !== clientId) return tell('xo', 'مش دورك، استنى ' + seat.name);
+    if (!seat) {
+      const other = x.seats[k === 'X' ? 'O' : 'X'];
+      // إذا إنت ماسك الحرف الثاني وفي حدا معك، خلّيه هو يلعب
+      if (other && other.cid === clientId && othersHere()) return tell('xo', 'دور ' + k + '، خلّي صاحبك يلعبها');
+      x.seats[k] = { cid: clientId, pid, name: user.name };
+    }
+    x.cells[i] = k;
+    const line = XO_LINES.find(([a, c, d]) => x.cells[a] && x.cells[a] === x.cells[c] && x.cells[a] === x.cells[d]);
+    if (line) { x.winner = k; x.line = line; x.score[k]++; }
+    else if (x.cells.every(Boolean)) { x.winner = 'draw'; x.score.draw++; }
+    else x.turn = k === 'X' ? 'O' : 'X';
+    io.to(room).emit('xo', publicXo(b));
+  });
+
+  // جولة جديدة: نفس اللاعبين ونفس النتيجة
+  socket.on('xo:new', () => {
+    const x = b.xo;
+    for (const k of ['X', 'O']) if (x.seats[k] && !isHere(x.seats[k].cid)) x.seats[k] = null;
+    if (x.seats.X && x.seats.O && x.seats.X.cid === x.seats.O.cid) x.seats.O = null;
+    x.cells = Array(9).fill('');
+    x.turn = 'X';
+    x.winner = null;
+    x.line = null;
+    io.to(room).emit('xo', publicXo(b));
+  });
+
+  // تصفير كامل: لاعبين جداد ونتيجة صفر
+  socket.on('xo:reset', () => {
+    b.xo = newXo();
+    io.to(room).emit('xo', publicXo(b));
+  });
+
+  // ---------- ذاكرة الإيموجي ----------
+  socket.on('mem:flip', (i) => {
+    const m = b.mem;
+    if (!Number.isInteger(i) || i < 0 || i >= m.cards.length || m.matched[i] || m.open.includes(i)) return;
+    if (m.open.length >= 2) return;
+    if (m.open.length === 1 && m.lock && m.lock.cid !== clientId) return tell('mem', 'استنى، ' + m.lock.name + ' عم يقلب');
+
+    clearTimeout(m.timer);
+
+    if (m.open.length === 0) {
+      m.lock = { cid: clientId, pid, name: user.name };
+      m.open = [i];
+      const round = ++m.round;
+      // إذا قلب كرت ونسي، بنرجّعه بعد 10 ثواني عشان ما يعلق الباقيين
+      m.timer = setTimeout(() => {
+        if (b.mem === m && m.round === round && m.open.length === 1) {
+          m.open = [];
+          m.lock = null;
+          io.to(room).emit('mem', publicMem(b));
+        }
+      }, 10000);
+      io.to(room).emit('mem', publicMem(b));
+      return;
+    }
+
+    // الكرت الثاني
+    m.open.push(i);
+    m.moves++;
+    const [a, c] = m.open;
+    if (m.cards[a] === m.cards[c]) {
+      m.matched[a] = m.matched[c] = true;
+      const s = m.scores.get(clientId) || { pid, name: user.name, n: 0 };
+      s.n++;
+      s.name = user.name;
+      m.scores.set(clientId, s);
+      m.open = [];
+      m.lock = null;
+      io.to(room).emit('mem', publicMem(b));
+    } else {
+      const round = ++m.round;
+      io.to(room).emit('mem', publicMem(b));
+      m.timer = setTimeout(() => {
+        if (b.mem === m && m.round === round) {
+          m.open = [];
+          m.lock = null;
+          io.to(room).emit('mem', publicMem(b));
+        }
+      }, 1100);
+    }
+  });
+
+  socket.on('mem:new', () => {
+    clearTimeout(b.mem.timer);
+    b.mem = newMem();
+    io.to(room).emit('mem', publicMem(b));
+  });
+
+  // ---------- الاسم والخروج ----------
   socket.on('rename', (n) => {
     const name = cleanName(n);
     if (!name) return;
     user.name = name;
+    for (const k of ['X', 'O']) if (b.xo.seats[k] && b.xo.seats[k].cid === clientId) b.xo.seats[k].name = name;
+    const sc = b.mem.scores.get(clientId);
+    if (sc) sc.name = name;
+    if (b.mem.lock && b.mem.lock.cid === clientId) b.mem.lock.name = name;
     io.to(room).emit('users', publicUsers(b));
+    io.to(room).emit('xo', publicXo(b));
+    io.to(room).emit('mem', publicMem(b));
   });
 
   socket.on('disconnect', () => {
@@ -232,10 +433,23 @@ io.on('connection', (socket) => {
     b.users.delete(socket.id);
     io.to(room).emit('users', publicUsers(b));
     io.to(room).emit('cursor', { sid: socket.id, x: null, y: null });
-    if (!b.users.size && !b.strokes.length && room !== 'main') boards.delete(room);
+
+    // إذا طلع لاعب من إكس أو بنفضّي مكانه عشان حدا ثاني يكمّل
+    if (!isHere(clientId)) {
+      let changed = false;
+      for (const k of ['X', 'O']) {
+        if (b.xo.seats[k] && b.xo.seats[k].cid === clientId) { b.xo.seats[k] = null; changed = true; }
+      }
+      if (changed) io.to(room).emit('xo', publicXo(b));
+    }
+
+    if (!b.users.size && !b.strokes.length && room !== 'main') {
+      clearTimeout(b.mem.timer);
+      boards.delete(room);
+    }
   });
 });
 
 server.listen(PORT, () => {
-  console.log('سبورتنا شغالة على http://localhost:' + PORT);
+  console.log('منقوشة شغالة على http://localhost:' + PORT);
 });
