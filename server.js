@@ -34,6 +34,8 @@ const STAMPS = new Set(['😂', '😢', '😠', '😍', '😮', '😎', '🤔', 
 
 // لعبة الذاكرة: كم زوج، ومن وين بننقّي الإيموجي
 const MEM_PAIRS = 10;
+const MEM_PREVIEW_MS = 5000;   // كم بتضل الكروت مكشوفة أول اللعبة
+const MEM_ASK_MS = 30000;      // كم بنستنى الثاني يرد على «مستعد؟»
 const MEM_POOL = ['🐶', '🐱', '🐭', '🐰', '🦊', '🐻', '🐼', '🐸', '🐵', '🦁', '🐯', '🐮', '🐷', '🐔', '🐧',
   '🦋', '🍎', '🍉', '🍇', '🍓', '🍌', '🍕', '🍩', '⚽', '🚗', '🌙', '🌈', '🎈', '🎁', '🚀'];
 
@@ -102,6 +104,7 @@ function publicXo(b) {
 function newMem() {
   const picks = shuffle(MEM_POOL.slice()).slice(0, MEM_PAIRS);
   return {
+    phase: 'idle',        // idle: لسا ما بلّشت | preview: الكروت مكشوفة 5 ثواني | play | done
     cards: shuffle([...picks, ...picks]),
     matched: Array(MEM_PAIRS * 2).fill(false),
     open: [],             // الكروت المقلوبة هلأ (واحد أو اثنين)
@@ -109,14 +112,25 @@ function newMem() {
     moves: 0,
     scores: new Map(),    // cid -> { pid, name, n }
     round: 0,
-    timer: null
+    timer: null,
+    ask: null,            // طلب «مستعد؟» { cid, pid, name, no: Set(cid) }
+    askTimer: null,
+    previewEnds: 0,
+    previewTimer: null
   };
+}
+function clearMemTimers(m) {
+  clearTimeout(m.timer);
+  clearTimeout(m.askTimer);
+  clearTimeout(m.previewTimer);
 }
 function publicMem(b) {
   const m = b.mem;
+  const peek = m.phase === 'preview';
   return {
+    phase: m.phase,
     // الكروت المخفية بتوصل null، فما حدا بيقدر يغشّ من المتصفح
-    faces: m.cards.map((c, i) => (m.matched[i] || m.open.includes(i) ? c : null)),
+    faces: m.cards.map((c, i) => (peek || m.matched[i] || m.open.includes(i) ? c : null)),
     matched: m.matched,
     open: m.open,
     lock: m.lock ? { pid: m.lock.pid, name: m.lock.name } : null,
@@ -125,8 +139,43 @@ function publicMem(b) {
     found: m.matched.filter(Boolean).length / 2,
     scores: [...m.scores.values()]
       .map((s) => ({ pid: s.pid, name: s.name, n: s.n }))
-      .sort((a, c) => c.n - a.n)
+      .sort((a, c) => c.n - a.n),
+    ask: m.ask ? { pid: m.ask.pid, name: m.ask.name, no: [...m.ask.no].map((cid) => b.pids.get(cid)) } : null,
+    previewLeft: peek ? Math.max(0, m.previewEnds - Date.now()) : 0
   };
+}
+function emitMem(b, room) {
+  io.to(room).emit('mem', publicMem(b));
+}
+// رسالة لشخص معين (على كل تبويباته المفتوحة)
+function tellCid(b, cid, game, text) {
+  for (const u of b.users.values()) if (u.cid === cid) io.to(u.id).emit('game:msg', { game, text });
+}
+function otherCids(b, cid) {
+  return new Set([...b.users.values()].map((u) => u.cid).filter((c) => c !== cid));
+}
+// بداية لعبة: كروت جديدة، بتنكشف للكل 5 ثواني وبعدين بتنقلب
+function memBegin(b, room) {
+  clearMemTimers(b.mem);
+  const m = newMem();
+  m.phase = 'preview';
+  m.previewEnds = Date.now() + MEM_PREVIEW_MS;
+  b.mem = m;
+  m.previewTimer = setTimeout(() => {
+    if (b.mem !== m) return;
+    m.phase = 'play';
+    emitMem(b, room);
+  }, MEM_PREVIEW_MS);
+  emitMem(b, room);
+}
+function memCancelAsk(b, room, note) {
+  const m = b.mem;
+  if (!m.ask) return;
+  const ask = m.ask;
+  clearTimeout(m.askTimer);
+  m.ask = null;
+  if (note) tellCid(b, ask.cid, 'mem', note);
+  emitMem(b, room);
 }
 
 // ---------- اللوحات ----------
@@ -360,6 +409,7 @@ io.on('connection', (socket) => {
   // ---------- ذاكرة الإيموجي ----------
   socket.on('mem:flip', (i) => {
     const m = b.mem;
+    if (m.phase !== 'play') return;
     if (!Number.isInteger(i) || i < 0 || i >= m.cards.length || m.matched[i] || m.open.includes(i)) return;
     if (m.open.length >= 2) return;
     if (m.open.length === 1 && m.lock && m.lock.cid !== clientId) return tell('mem', 'استنى، ' + m.lock.name + ' عم يقلب');
@@ -394,6 +444,7 @@ io.on('connection', (socket) => {
       m.scores.set(clientId, s);
       m.open = [];
       m.lock = null;
+      if (m.matched.every(Boolean)) m.phase = 'done';
       io.to(room).emit('mem', publicMem(b));
     } else {
       const round = ++m.round;
@@ -408,10 +459,37 @@ io.on('connection', (socket) => {
     }
   });
 
-  socket.on('mem:new', () => {
-    clearTimeout(b.mem.timer);
-    b.mem = newMem();
-    io.to(room).emit('mem', publicMem(b));
+  // «ابدأ اللعبة»: إذا إنت لحالك بتبلّش فوراً، وإذا في حدا معك بنسأله «مستعد؟»
+  socket.on('mem:start', () => {
+    const m = b.mem;
+    if (m.phase === 'preview') return;
+    if (m.ask) {
+      // إذا في طلب من غيرك وضغطت «ابدأ»، كأنك قلت «نعم»
+      if (m.ask.cid !== clientId) memBegin(b, room);
+      return;
+    }
+    if (!othersHere()) { memBegin(b, room); return; }
+    m.ask = { cid: clientId, pid, name: user.name, no: new Set() };
+    m.askTimer = setTimeout(() => {
+      if (b.mem === m && m.ask) memCancelAsk(b, room, 'ما حدا ردّ، جرّب كمان مرة');
+    }, MEM_ASK_MS);
+    emitMem(b, room);
+  });
+
+  // الرد على «مستعد؟»: true = نعم، false = لا
+  socket.on('mem:answer', (yes) => {
+    const m = b.mem;
+    if (!m.ask || m.ask.cid === clientId || m.phase === 'preview') return;
+    if (yes === true) { memBegin(b, room); return; }
+    m.ask.no.add(clientId);
+    tellCid(b, m.ask.cid, 'mem', user.name + ' مش جاهز هلأ');
+    const others = otherCids(b, m.ask.cid);
+    if ([...others].every((c) => m.ask.no.has(c))) memCancelAsk(b, room);
+    else emitMem(b, room);
+  });
+
+  socket.on('mem:cancel', () => {
+    if (b.mem.ask && b.mem.ask.cid === clientId) memCancelAsk(b, room);
   });
 
   // ---------- الاسم والخروج ----------
@@ -423,6 +501,7 @@ io.on('connection', (socket) => {
     const sc = b.mem.scores.get(clientId);
     if (sc) sc.name = name;
     if (b.mem.lock && b.mem.lock.cid === clientId) b.mem.lock.name = name;
+    if (b.mem.ask && b.mem.ask.cid === clientId) b.mem.ask.name = name;
     io.to(room).emit('users', publicUsers(b));
     io.to(room).emit('xo', publicXo(b));
     io.to(room).emit('mem', publicMem(b));
@@ -443,8 +522,17 @@ io.on('connection', (socket) => {
       if (changed) io.to(room).emit('xo', publicXo(b));
     }
 
+    // طلب «مستعد؟» معلّق: إذا طلع صاحب الطلب، أو ما ضل حدا يرد، بنلغيه
+    const ask = b.mem.ask;
+    if (ask) {
+      const others = otherCids(b, ask.cid);
+      if (ask.cid === clientId && !isHere(clientId)) memCancelAsk(b, room);
+      else if (!others.size) memCancelAsk(b, room, 'صاحبك طلع، اضغط «ابدأ اللعبة» لتلعب لحالك');
+      else if ([...others].every((c) => ask.no.has(c))) memCancelAsk(b, room);
+    }
+
     if (!b.users.size && !b.strokes.length && room !== 'main') {
-      clearTimeout(b.mem.timer);
+      clearMemTimers(b.mem);
       boards.delete(room);
     }
   });
