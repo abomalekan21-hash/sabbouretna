@@ -320,6 +320,40 @@ canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block
 .pad .r { grid-column: 3; grid-row: 2; }
 @media (hover: hover) and (pointer: fine) { .pad { display: none; } }
 
+/* ---------- التلوين ---------- */
+.game.wide { width: min(100%, 640px); }
+.pics { list-style: none; display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 12px; padding: 0; }
+.pic {
+  appearance: none; display: inline-flex; align-items: center; gap: 6px; cursor: pointer;
+  padding-block: 3px; padding-inline: 4px 12px; min-height: 40px;
+  background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-radius: 999px;
+  font: inherit; font-size: 15px; font-weight: 600;
+}
+.pic svg { width: 32px; height: 32px; border-radius: 50%; background: #FFFDF7; flex: none; }
+.pic:hover { border-color: var(--ink-soft); }
+.pic[aria-pressed="true"] { background: var(--ink); color: var(--page); border-color: var(--ink); }
+.pic:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+.paper { position: relative; aspect-ratio: 1; background: #FFFDF7; border-radius: 2px; box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .25); }
+.paper svg { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: manipulation; }
+.cp [data-r] { fill: #FFFFFF; stroke: #2B2B2B; stroke-width: 2.2; stroke-linejoin: round; cursor: pointer; transition: fill .2s ease; }
+.cp .ln { fill: none; stroke: #2B2B2B; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; pointer-events: none; }
+.cp .dk { fill: #2B2B2B; stroke: none; pointer-events: none; }
+.pic .cp [data-r], .pic .cp .ln { stroke-width: 4; }
+.swatches { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+.sw {
+  appearance: none; margin: 0; padding: 0; cursor: pointer; flex: none;
+  width: 32px; height: 32px; border-radius: 50%; background: var(--c);
+  border: 2px solid rgba(0, 0, 0, .3); box-shadow: inset 0 -3px 0 rgba(0, 0, 0, .15);
+  transition: transform .12s ease;
+}
+.sw[aria-pressed="true"] { transform: translateY(-4px); box-shadow: 0 0 0 3px var(--wood-text), 0 6px 6px -2px rgba(0, 0, 0, .45); }
+.sw:focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; }
+@media (max-width: 480px) { .sw { width: 30px; height: 30px; } }
+@media (max-width: 520px) {
+  .tabs { flex-wrap: wrap; justify-content: center; width: 100%; border-radius: 22px; }
+  .tab { padding-inline: 12px; }
+}
+
 [hidden] { display: none !important; }
 @media (max-width: 560px) { .tray { justify-content: center; } .sep { display: none; } }
 @media (max-width: 480px) { .mem-grid { grid-template-columns: repeat(4, 1fr); } }
@@ -345,6 +379,7 @@ canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block
     <button type="button" class="tab" role="tab" id="tab-xo" data-tab="xo" aria-controls="panel-xo" aria-selected="false" tabindex="-1">إكس أو</button>
     <button type="button" class="tab" role="tab" id="tab-mem" data-tab="mem" aria-controls="panel-mem" aria-selected="false" tabindex="-1">ذاكرة الإيموجي</button>
     <button type="button" class="tab" role="tab" id="tab-snake" data-tab="snake" aria-controls="panel-snake" aria-selected="false" tabindex="-1">الحية</button>
+    <button type="button" class="tab" role="tab" id="tab-paint" data-tab="paint" aria-controls="panel-paint" aria-selected="false" tabindex="-1">لوّن</button>
   </nav>
 
   <p class="notice" id="notice" role="status" hidden></p>
@@ -467,6 +502,26 @@ canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block
         <button type="button" class="r" data-d="r" aria-label="يمين">▶</button>
       </div>
       <p class="game-note">تحكّم بأسهم الكيبورد أو W A S D، أو اسحب بإصبعك على اللوحة.</p>
+    </section>
+
+    <!-- التلوين -->
+    <section class="game wide" id="panel-paint" role="tabpanel" aria-labelledby="tab-paint" hidden>
+      <div class="game-head">
+        <p class="game-status" id="paint-status" aria-live="polite"></p>
+      </div>
+      <ul class="pics" id="paint-pics" aria-label="اختار رسمة"></ul>
+      <div class="frame">
+        <div class="paper">
+          <svg id="paint-svg" class="cp" viewBox="0 0 200 200" role="img" aria-label="الرسمة اللي عم تلوّنها"></svg>
+        </div>
+      </div>
+      <div class="tray">
+        <div class="swatches" id="paint-colors" role="group" aria-label="الألوان"></div>
+        <div class="group actions">
+          <button type="button" class="act" id="paint-save">نزّل الصورة</button>
+          <button type="button" class="act" id="paint-clear">امسح الألوان</button>
+        </div>
+      </div>
     </section>
   </main>
 </div>
@@ -685,6 +740,7 @@ canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block
     xo = d.xo || null; renderXo();
     mem = d.mem || null; renderMem();
     snake = d.snake || null; renderSnake();
+    paint = d.paint || null; shownPic = ''; renderPaint();
   });
   socket.on('users', (list) => { users = Array.isArray(list) ? list : []; renderPeople(); pruneCursors(); });
   socket.on('stroke:start', (s) => { live.set(s.id, { ...s, p: s.p.slice() }); frameDirty = true; });
@@ -723,7 +779,7 @@ canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block
   }
 
   // ---------- التبويبات ----------
-  const TABS = ['draw', 'xo', 'mem', 'snake'];
+  const TABS = ['draw', 'xo', 'mem', 'snake', 'paint'];
   function setTab(t) {
     if (!TABS.includes(t) || t === tab) return;
     if (t !== 'draw') {
@@ -764,7 +820,7 @@ canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block
     s.textContent = text; s.classList.add('warn');
     flashTimers[game] = setTimeout(() => {
       s.classList.remove('warn');
-      if (game === 'xo') renderXo(); else if (game === 'snake') renderSnake(); else renderMem();
+      if (game === 'xo') renderXo(); else if (game === 'snake') renderSnake(); else if (game === 'paint') renderPaint(); else renderMem();
     }, 2200);
   }
   const isMe = (x) => !!(x && me && x.pid === me.pid);
@@ -1148,6 +1204,261 @@ canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block
   const swipeEnd = (e) => { if (swipe && e.pointerId === swipe.id) swipe = null; };
   scv.addEventListener('pointerup', swipeEnd);
   scv.addEventListener('pointercancel', swipeEnd);
+
+  // ---------- التلوين ----------
+  // نجمة صغيرة (للصاروخ)
+  const star = (id, cx, cy, R) => {
+    const pts = [];
+    for (let i = 0; i < 10; i++) {
+      const a = -Math.PI / 2 + i * Math.PI / 5, r = i % 2 ? R * .45 : R;
+      pts.push((cx + r * Math.cos(a)).toFixed(1) + ',' + (cy + r * Math.sin(a)).toFixed(1));
+    }
+    return '<polygon data-r="' + id + '" points="' + pts.join(' ') + '"/>';
+  };
+  // الرسومات: كل جزء إله data-r، والخطوط اللي ما بتتلون class="ln"
+  // (لازم الأسماء تكون نفس اللي بـ PAINT_PICS بـ server.js)
+  const PICS = [
+    { id: 'house', n: 'بيت', svg:
+      '<rect data-r="sky" x="0" y="0" width="200" height="200"/>' +
+      '<path data-r="cld" d="M30 60 Q20 60 20 51 Q20 42 31 43 Q34 32 46 33 Q56 33 60 41 Q71 39 73 49 Q81 51 79 60 Z"/>' +
+      '<circle data-r="sun" cx="164" cy="34" r="16"/>' +
+      '<path class="ln" d="M164 13 V6 M164 55 V62 M143 34 H136 M185 34 H192 M149 19 L144 14 M179 19 L184 14 M149 49 L144 54 M179 49 L184 54"/>' +
+      '<path data-r="grs" d="M0 158 Q50 148 100 156 Q150 164 200 152 L200 200 L0 200 Z"/>' +
+      '<rect data-r="chm" x="126" y="50" width="14" height="32"/>' +
+      '<polygon data-r="roof" points="38,96 100,46 162,96"/>' +
+      '<rect data-r="wall" x="50" y="96" width="100" height="66"/>' +
+      '<rect data-r="door" x="88" y="118" width="24" height="44" rx="2"/>' +
+      '<rect data-r="w1" x="60" y="108" width="20" height="20"/>' +
+      '<rect data-r="w2" x="120" y="108" width="20" height="20"/>' +
+      '<polygon data-r="walk" points="90,162 110,162 122,200 78,200"/>' +
+      '<path class="ln" d="M70 108 V128 M60 118 H80 M130 108 V128 M120 118 H140"/>' +
+      '<circle class="dk" cx="106" cy="141" r="2"/>' },
+    { id: 'flower', n: 'وردة', svg:
+      '<rect data-r="bg" x="0" y="0" width="200" height="200"/>' +
+      '<rect data-r="tbl" x="0" y="178" width="200" height="22"/>' +
+      '<rect data-r="stem" x="97" y="80" width="6" height="66"/>' +
+      '<path data-r="lf1" d="M99 128 Q76 108 62 120 Q78 137 99 132 Z"/>' +
+      '<path data-r="lf2" d="M101 112 Q124 92 138 104 Q122 121 101 116 Z"/>' +
+      '<polygon data-r="pot" points="72,150 128,150 120,190 80,190"/>' +
+      '<rect data-r="rim" x="66" y="142" width="68" height="12" rx="3"/>' +
+      [0, 60, 120, 180, 240, 300].map((a, i) => '<ellipse data-r="p' + (i + 1) + '" cx="100" cy="42" rx="12" ry="19" transform="rotate(' + a + ' 100 66)"/>').join('') +
+      '<circle data-r="ctr" cx="100" cy="66" r="13"/>' },
+    { id: 'tree', n: 'شجرة', svg:
+      '<rect data-r="sky" x="0" y="0" width="200" height="200"/>' +
+      '<circle data-r="sun" cx="34" cy="34" r="15"/>' +
+      '<path data-r="hill" d="M0 165 Q60 145 120 158 Q170 168 200 155 L200 200 L0 200 Z"/>' +
+      '<path data-r="trnk" d="M91 172 L94 110 L106 110 L109 172 Z"/>' +
+      '<circle data-r="c1" cx="72" cy="94" r="32"/>' +
+      '<circle data-r="c2" cx="128" cy="94" r="32"/>' +
+      '<circle data-r="c3" cx="100" cy="66" r="38"/>' +
+      '<circle data-r="a1" cx="80" cy="76" r="7"/>' +
+      '<circle data-r="a2" cx="118" cy="58" r="7"/>' +
+      '<circle data-r="a3" cx="134" cy="104" r="7"/>' +
+      '<circle data-r="a4" cx="66" cy="108" r="7"/>' +
+      '<circle data-r="a5" cx="104" cy="90" r="7"/>' },
+    { id: 'car', n: 'سيارة', svg:
+      '<rect data-r="sky" x="0" y="0" width="200" height="150"/>' +
+      '<rect data-r="road" x="0" y="150" width="200" height="50"/>' +
+      '<path class="ln" d="M10 180 H34 M60 180 H84 M110 180 H134 M160 180 H184"/>' +
+      '<path data-r="body" d="M24 146 L24 118 Q24 110 33 109 L60 106 L78 84 Q82 79 90 79 L134 79 Q141 79 145 85 L160 106 L172 108 Q180 110 180 118 L180 146 Z"/>' +
+      '<path data-r="win1" d="M88 87 L74 104 L110 104 L110 87 Z"/>' +
+      '<path data-r="win2" d="M116 87 L116 104 L154 104 L141 87 Z"/>' +
+      '<path class="ln" d="M113 108 V140 M118 118 H128"/>' +
+      '<rect data-r="lamp" x="172" y="114" width="8" height="8" rx="2"/>' +
+      '<circle data-r="t1" cx="60" cy="146" r="17"/>' +
+      '<circle data-r="t2" cx="146" cy="146" r="17"/>' +
+      '<circle data-r="h1" cx="60" cy="146" r="7"/>' +
+      '<circle data-r="h2" cx="146" cy="146" r="7"/>' },
+    { id: 'fish', n: 'سمكة', svg:
+      '<rect data-r="sea" x="0" y="0" width="200" height="200"/>' +
+      '<path data-r="sand" d="M0 178 Q50 168 100 176 Q150 184 200 172 L200 200 L0 200 Z"/>' +
+      '<path data-r="weed" d="M28 179 Q18 152 30 130 Q40 112 32 92 Q48 110 42 134 Q36 156 44 177 Z"/>' +
+      '<path data-r="weed2" d="M168 175 Q160 156 170 140 Q178 126 172 112 Q186 126 180 144 Q174 160 180 173 Z"/>' +
+      '<polygon data-r="tail" points="140,100 182,70 174,100 182,130"/>' +
+      '<path data-r="fin1" d="M78 72 Q96 44 120 70 Z"/>' +
+      '<path data-r="fin2" d="M88 129 Q100 150 116 128 Z"/>' +
+      '<ellipse data-r="body" cx="95" cy="100" rx="55" ry="34"/>' +
+      '<circle data-r="s1" cx="102" cy="88" r="7"/>' +
+      '<circle data-r="s2" cx="122" cy="104" r="6"/>' +
+      '<circle data-r="s3" cx="98" cy="114" r="5"/>' +
+      '<circle data-r="eye" cx="64" cy="92" r="8"/>' +
+      '<circle class="dk" cx="62" cy="92" r="3.5"/>' +
+      '<path class="ln" d="M50 110 Q57 115 64 110"/>' +
+      '<circle data-r="b1" cx="40" cy="60" r="6"/>' +
+      '<circle data-r="b2" cx="30" cy="40" r="4"/>' +
+      '<circle data-r="b3" cx="44" cy="25" r="3"/>' },
+    { id: 'butterfly', n: 'فراشة', svg:
+      '<rect data-r="bg" x="0" y="0" width="200" height="200"/>' +
+      '<path data-r="uw1" d="M98 96 Q70 36 40 52 Q18 70 40 98 Q62 112 98 104 Z"/>' +
+      '<path data-r="uw2" d="M102 96 Q130 36 160 52 Q182 70 160 98 Q138 112 102 104 Z"/>' +
+      '<path data-r="lw1" d="M98 106 Q66 108 54 132 Q54 156 78 150 Q96 140 98 116 Z"/>' +
+      '<path data-r="lw2" d="M102 106 Q134 108 146 132 Q146 156 122 150 Q104 140 102 116 Z"/>' +
+      '<circle data-r="d1" cx="58" cy="74" r="10"/>' +
+      '<circle data-r="d2" cx="142" cy="74" r="10"/>' +
+      '<circle data-r="d3" cx="74" cy="132" r="7"/>' +
+      '<circle data-r="d4" cx="126" cy="132" r="7"/>' +
+      '<path class="ln" d="M97 66 Q88 48 80 44 M103 66 Q112 48 120 44"/>' +
+      '<circle class="dk" cx="80" cy="44" r="3"/>' +
+      '<circle class="dk" cx="120" cy="44" r="3"/>' +
+      '<ellipse data-r="bdy" cx="100" cy="108" rx="6" ry="32"/>' +
+      '<circle data-r="hd" cx="100" cy="72" r="8"/>' },
+    { id: 'rocket', n: 'صاروخ', svg:
+      '<rect data-r="spc" x="0" y="0" width="200" height="200"/>' +
+      '<circle data-r="moon" cx="38" cy="40" r="16"/>' +
+      '<circle data-r="pl" cx="162" cy="170" r="16"/>' +
+      '<path data-r="ring" fill-rule="evenodd" d="M132 170 a30 8 0 1 0 60 0 a30 8 0 1 0 -60 0 Z M140 170 a22 4 0 1 0 44 0 a22 4 0 1 0 -44 0 Z"/>' +
+      star('st1', 156, 34, 9) + star('st2', 30, 120, 7) + star('st3', 176, 92, 6) + star('st4', 52, 170, 6) +
+      '<path data-r="flm" d="M84 136 Q100 190 116 136 Z"/>' +
+      '<path data-r="flm2" d="M91 136 Q100 168 109 136 Z"/>' +
+      '<path data-r="fn1" d="M80 104 L58 140 L82 132 Z"/>' +
+      '<path data-r="fn2" d="M120 104 L142 140 L118 132 Z"/>' +
+      '<path data-r="body" d="M100 28 Q127 58 124 136 L76 136 Q73 58 100 28 Z"/>' +
+      '<path data-r="nose" d="M100 28 Q113 41 119 60 L81 60 Q87 41 100 28 Z"/>' +
+      '<circle data-r="win" cx="100" cy="90" r="13"/>' +
+      '<circle class="ln" cx="100" cy="90" r="8"/>' },
+    { id: 'cat', n: 'قطة', svg:
+      '<rect data-r="bg" x="0" y="0" width="200" height="200"/>' +
+      '<ellipse data-r="bdy" cx="100" cy="182" rx="52" ry="36"/>' +
+      '<polygon data-r="e1" points="48,82 58,28 92,58"/>' +
+      '<polygon data-r="e2" points="152,82 142,28 108,58"/>' +
+      '<polygon data-r="ie1" points="60,70 64,44 80,58"/>' +
+      '<polygon data-r="ie2" points="140,70 136,44 120,58"/>' +
+      '<ellipse data-r="head" cx="100" cy="102" rx="56" ry="46"/>' +
+      '<ellipse data-r="ey1" cx="78" cy="94" rx="9" ry="11"/>' +
+      '<ellipse data-r="ey2" cx="122" cy="94" rx="9" ry="11"/>' +
+      '<ellipse class="dk" cx="79" cy="96" rx="3" ry="6"/>' +
+      '<ellipse class="dk" cx="123" cy="96" rx="3" ry="6"/>' +
+      '<polygon data-r="nose" points="93,110 107,110 100,118"/>' +
+      '<path class="ln" d="M100 118 V124 M100 124 Q93 132 86 126 M100 124 Q107 132 114 126 M62 112 H38 M62 118 L40 125 M138 112 H162 M138 118 L160 125"/>' }
+  ];
+  const PAINT_COLORS = [
+    { c: '#E63946', n: 'أحمر' }, { c: '#F4A261', n: 'برتقاني' }, { c: '#FFD166', n: 'أصفر' },
+    { c: '#8AC926', n: 'أخضر فاتح' }, { c: '#2A9D8F', n: 'أخضر' }, { c: '#6EC6FF', n: 'سماوي' },
+    { c: '#3A86FF', n: 'أزرق' }, { c: '#8338EC', n: 'بنفسجي' }, { c: '#FF70A6', n: 'زهري' },
+    { c: '#8D5B3D', n: 'بني' }, { c: '#F1D3B3', n: 'بيج' }, { c: '#9CA3AF', n: 'رمادي' },
+    { c: '#2B2B2B', n: 'أسود' }, { c: '#FFFFFF', n: 'أبيض' }
+  ];
+  let paint = null;                   // { pic, fills: { pic: { جزء: لون } } }
+  let paintColor = PAINT_COLORS[0].c;
+  const paintSvg = $('paint-svg');
+  const picName = (id) => (PICS.find((x) => x.id === id) || PICS[0]).n;
+
+  PICS.forEach((pc) => {
+    const b = el('button', 'pic');
+    b.type = 'button';
+    b.innerHTML = '<svg class="cp" viewBox="0 0 200 200" aria-hidden="true">' + pc.svg + '</svg>';
+    b.appendChild(el('span', '', pc.n));
+    b.addEventListener('click', () => {
+      if (!paint || paint.pic === pc.id) return;
+      paint.pic = pc.id;
+      socket.emit('paint:pic', pc.id);
+      renderPaint();
+    });
+    const li = el('li'); li.appendChild(b); $('paint-pics').appendChild(li);
+    pc.el = b;
+  });
+  PAINT_COLORS.forEach((pc) => {
+    const b = el('button', 'sw');
+    b.type = 'button';
+    b.style.setProperty('--c', pc.c);
+    b.setAttribute('aria-label', pc.n); b.title = pc.n;
+    b.addEventListener('click', () => { paintColor = pc.c; syncSwatches(); });
+    $('paint-colors').appendChild(b); pc.el = b;
+  });
+  function syncSwatches() {
+    for (const pc of PAINT_COLORS) pc.el.setAttribute('aria-pressed', String(pc.c === paintColor));
+  }
+  syncSwatches();
+
+  let shownPic = '';
+  function renderPaint() {
+    if (!paint) return;
+    if (shownPic !== paint.pic) {
+      paintSvg.innerHTML = (PICS.find((x) => x.id === paint.pic) || PICS[0]).svg;
+      paintSvg.setAttribute('aria-label', 'رسمة ' + picName(paint.pic) + ' للتلوين');
+      shownPic = paint.pic;
+    }
+    const f = paint.fills[paint.pic] || {};
+    for (const r of paintSvg.querySelectorAll('[data-r]')) r.style.fill = f[r.dataset.r] || '';
+    for (const pc of PICS) pc.el.setAttribute('aria-pressed', String(pc.id === paint.pic));
+    const st = $('paint-status');
+    if (!st.classList.contains('warn')) st.textContent = 'اختار لون، واضغط على أي جزء بالرسمة. اللي معك بيشوف تلوينك وبيقدر يلوّن معك.';
+  }
+  paintSvg.addEventListener('click', (e) => {
+    const t = e.target.closest('[data-r]');
+    if (!t || !paint) return;
+    const r = t.dataset.r;
+    const f = paint.fills[paint.pic] || (paint.fills[paint.pic] = {});
+    if (f[r] === paintColor) return;
+    f[r] = paintColor;
+    t.style.fill = paintColor;
+    socket.emit('paint:fill', { pic: paint.pic, r, c: paintColor });
+  });
+  socket.on('paint:fill', (d) => {
+    if (!paint) return;
+    const f = paint.fills[d.pic] || (paint.fills[d.pic] = {});
+    if (d.c) f[d.r] = d.c; else delete f[d.r];
+    if (d.pic === shownPic) {
+      const t = paintSvg.querySelector('[data-r="' + d.r + '"]');
+      if (t) t.style.fill = d.c || '';
+    }
+    ping('paint');
+  });
+  socket.on('paint:pic', (d) => {
+    if (!paint) return;
+    paint.pic = d.pic;
+    renderPaint();
+    flash('paint', d.by + ' غيّر الرسمة لـ«' + picName(d.pic) + '»');
+    ping('paint');
+  });
+  socket.on('paint:clear', (d) => {
+    if (!paint) return;
+    delete paint.fills[d.pic];
+    renderPaint();
+    if (!me || d.by !== me.name) flash('paint', d.by + ' مسح الألوان');
+  });
+  // المسح بدها ضغطتين، عشان ما ينمسح تعب حدا بالغلط
+  let clearArmed = null;
+  $('paint-clear').addEventListener('click', () => {
+    const b = $('paint-clear');
+    if (!clearArmed) {
+      b.textContent = 'متأكد؟ اضغط كمان مرة';
+      clearArmed = setTimeout(() => { clearArmed = null; b.textContent = 'امسح الألوان'; }, 3000);
+      return;
+    }
+    clearTimeout(clearArmed); clearArmed = null;
+    b.textContent = 'امسح الألوان';
+    if (paint) socket.emit('paint:clear', paint.pic);
+  });
+  // تنزيل الرسمة كصورة PNG
+  $('paint-save').addEventListener('click', () => {
+    if (!paint) return;
+    const clone = paintSvg.cloneNode(true);
+    clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+    clone.setAttribute('width', '1000'); clone.setAttribute('height', '1000');
+    const style = document.createElementNS('http://www.w3.org/2000/svg', 'style');
+    style.textContent = '.rg{fill:#fff;stroke:#2B2B2B;stroke-width:2.2;stroke-linejoin:round}.ln{fill:none;stroke:#2B2B2B;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}.dk{fill:#2B2B2B}';
+    clone.insertBefore(style, clone.firstChild);
+    for (const r of clone.querySelectorAll('[data-r]')) r.setAttribute('class', 'rg');
+    const url = URL.createObjectURL(new Blob([new XMLSerializer().serializeToString(clone)], { type: 'image/svg+xml' }));
+    const img = new Image();
+    img.onload = () => {
+      const c = document.createElement('canvas');
+      c.width = c.height = 1000;
+      const x = c.getContext('2d');
+      x.fillStyle = '#FFFFFF'; x.fillRect(0, 0, 1000, 1000);
+      x.drawImage(img, 0, 0, 1000, 1000);
+      URL.revokeObjectURL(url);
+      c.toBlob((blob) => {
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = 'منقوشة-' + picName(paint.pic) + '.png';
+        document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+      }, 'image/png');
+    };
+    img.src = url;
+  });
 
   // ---------- الناس والمؤشرات ----------
   function renderPeople() {
