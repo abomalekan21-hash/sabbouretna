@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>منقوشة</title>
+<title>منقوشة بزيت وزعتر</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🖍️</text></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -294,6 +294,32 @@ canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block
 .ask-box .no { background: transparent; color: var(--ink); border: 1px solid var(--line); }
 .ask-box button:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
 
+/* ---------- الحية ---------- */
+.snake-board canvas { cursor: default; }
+.snake-big {
+  position: absolute; inset: 0; z-index: 2; display: grid; place-items: center; margin: 0; pointer-events: none;
+  font-size: clamp(64px, 18vw, 140px); font-weight: 800; line-height: 1; color: var(--chalk);
+  text-shadow: 0 4px 0 rgba(0, 0, 0, .3);
+}
+.game-note { margin: 10px 0 0; text-align: center; color: var(--ink-soft); font-size: 14px; }
+.pad {
+  direction: ltr; display: grid; justify-content: center; gap: 8px; margin: 14px auto 0;
+  grid-template-columns: repeat(3, 64px); grid-template-rows: repeat(2, 58px);
+}
+.pad button {
+  appearance: none; border: 0; margin: 0; padding: 0; cursor: pointer; touch-action: none;
+  border-radius: 14px; background: var(--wood-dark); color: var(--wood-text);
+  font-size: 24px; line-height: 1; box-shadow: 0 4px 0 rgba(0, 0, 0, .3);
+  -webkit-user-select: none; user-select: none;
+}
+.pad button:active { transform: translateY(3px); box-shadow: 0 1px 0 rgba(0, 0, 0, .3); }
+.pad button:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+.pad .u { grid-column: 2; grid-row: 1; }
+.pad .l { grid-column: 1; grid-row: 2; }
+.pad .d { grid-column: 2; grid-row: 2; }
+.pad .r { grid-column: 3; grid-row: 2; }
+@media (hover: hover) and (pointer: fine) { .pad { display: none; } }
+
 [hidden] { display: none !important; }
 @media (max-width: 560px) { .tray { justify-content: center; } .sep { display: none; } }
 @media (max-width: 480px) { .mem-grid { grid-template-columns: repeat(4, 1fr); } }
@@ -304,7 +330,7 @@ canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block
 <div class="app">
   <header class="top">
     <div>
-      <h1>منقوشة</h1>
+      <h1>منقوشة بزيت وزعتر</h1>
       <p class="sub">ابعت الرابط لصاحبك، وأول ما يفتحه بترسموا وبتلعبوا مع بعض.</p>
     </div>
     <div class="who">
@@ -318,6 +344,7 @@ canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block
     <button type="button" class="tab" role="tab" id="tab-draw" data-tab="draw" aria-controls="panel-draw" aria-selected="true">ارسم</button>
     <button type="button" class="tab" role="tab" id="tab-xo" data-tab="xo" aria-controls="panel-xo" aria-selected="false" tabindex="-1">إكس أو</button>
     <button type="button" class="tab" role="tab" id="tab-mem" data-tab="mem" aria-controls="panel-mem" aria-selected="false" tabindex="-1">ذاكرة الإيموجي</button>
+    <button type="button" class="tab" role="tab" id="tab-snake" data-tab="snake" aria-controls="panel-snake" aria-selected="false" tabindex="-1">الحية</button>
   </nav>
 
   <p class="notice" id="notice" role="status" hidden></p>
@@ -404,6 +431,43 @@ canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block
         </div>
       </div>
     </section>
+
+    <!-- الحية -->
+    <section class="game" id="panel-snake" role="tabpanel" aria-labelledby="tab-snake" hidden>
+      <div class="game-head">
+        <p class="game-status" id="snake-status" aria-live="polite"></p>
+        <ul class="people" id="snake-scores" aria-label="طول كل حية"></ul>
+      </div>
+      <div class="frame">
+        <div class="slate square snake-board">
+          <canvas id="snake-cv" aria-label="لوحة الحية"></canvas>
+          <p class="snake-big" id="snake-big" aria-hidden="true" hidden></p>
+          <div class="ask" id="snake-ask" role="dialog" aria-labelledby="snake-ask-text" hidden>
+            <div class="ask-box">
+              <p id="snake-ask-text"></p>
+              <div class="row">
+                <button type="button" class="yes" id="snake-yes">نعم</button>
+                <button type="button" class="no" id="snake-no">لا</button>
+                <button type="button" class="no" id="snake-cancel">إلغاء الطلب</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="tray">
+        <ul class="chips" id="snake-info"></ul>
+        <div class="group actions">
+          <button type="button" class="act" id="snake-start">ابدأ اللعبة</button>
+        </div>
+      </div>
+      <div class="pad" id="snake-pad" aria-label="أسهم التحكم">
+        <button type="button" class="u" data-d="u" aria-label="فوق">▲</button>
+        <button type="button" class="l" data-d="l" aria-label="شمال">◀</button>
+        <button type="button" class="d" data-d="d" aria-label="تحت">▼</button>
+        <button type="button" class="r" data-d="r" aria-label="يمين">▶</button>
+      </div>
+      <p class="game-note">تحكّم بأسهم الكيبورد أو W A S D، أو اسحب بإصبعك على اللوحة.</p>
+    </section>
   </main>
 </div>
 
@@ -482,7 +546,7 @@ canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block
   let scale = 1, fullRedraw = true, frameDirty = true;
   let lastCursor = null, cursorSent = null;
   let tab = 'draw';
-  let xo = null, mem = null;
+  let xo = null, mem = null, snake = null;
 
   // ---------- الأدوات ----------
   CHALKS.forEach((ch) => {
@@ -620,6 +684,7 @@ canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block
     fullRedraw = true; frameDirty = true;
     xo = d.xo || null; renderXo();
     mem = d.mem || null; renderMem();
+    snake = d.snake || null; renderSnake();
   });
   socket.on('users', (list) => { users = Array.isArray(list) ? list : []; renderPeople(); pruneCursors(); });
   socket.on('stroke:start', (s) => { live.set(s.id, { ...s, p: s.p.slice() }); frameDirty = true; });
@@ -643,6 +708,7 @@ canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block
   socket.on('cursor', (d) => renderCursor(d));
   socket.on('xo', (s) => { xo = s; renderXo(); ping('xo'); });
   socket.on('mem', (s) => { mem = s; renderMem(); ping('mem'); });
+  socket.on('snake', (s) => { snake = s; renderSnake(); ping('snake'); });
   socket.on('game:msg', (d) => { if (d && d.text) flash(d.game, d.text); });
 
   function setConn() {
@@ -657,7 +723,7 @@ canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block
   }
 
   // ---------- التبويبات ----------
-  const TABS = ['draw', 'xo', 'mem'];
+  const TABS = ['draw', 'xo', 'mem', 'snake'];
   function setTab(t) {
     if (!TABS.includes(t) || t === tab) return;
     if (t !== 'draw') {
@@ -673,6 +739,7 @@ canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block
       $('panel-' + k).hidden = k !== t;
     }
     if (mem) renderMem();
+    if (snake) renderSnake();
   }
   function ping(t) { if (tab !== t) $('tab-' + t).dataset.new = ''; }
   for (const k of TABS) {
@@ -682,6 +749,7 @@ canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block
       // الصفحة من اليمين لليسار: السهم الشمال بيروح للتبويب اللي بعده
       const step = e.key === 'ArrowLeft' ? 1 : e.key === 'ArrowRight' ? -1 : 0;
       if (!step) return;
+      if (tab === 'snake' && snakeLive() && snakeMine()) return; // الأسهم للحية وقت اللعب
       e.preventDefault();
       const next = TABS[(TABS.indexOf(tab) + step + TABS.length) % TABS.length];
       setTab(next); $('tab-' + next).focus();
@@ -696,7 +764,7 @@ canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block
     s.textContent = text; s.classList.add('warn');
     flashTimers[game] = setTimeout(() => {
       s.classList.remove('warn');
-      if (game === 'xo') renderXo(); else renderMem();
+      if (game === 'xo') renderXo(); else if (game === 'snake') renderSnake(); else renderMem();
     }, 2200);
   }
   const isMe = (x) => !!(x && me && x.pid === me.pid);
@@ -789,8 +857,9 @@ canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block
   $('mem-no').addEventListener('click', () => socket.emit('mem:answer', false));
   $('mem-cancel').addEventListener('click', () => socket.emit('mem:cancel'));
 
-  // هل في طلب «مستعد؟» لازم أرد عليه أنا؟
-  const askForMe = () => !!(mem && mem.ask && me && !isMe(mem.ask) && !mem.ask.no.includes(me.pid) && mem.phase !== 'preview');
+  // هل في طلب «مستعد؟» لازم أرد عليه أنا؟ (نفس الشي لكل الألعاب)
+  const askForMeIn = (st) => !!(st && st.ask && me && !isMe(st.ask) && !st.ask.no.includes(me.pid) && st.phase !== 'preview' && st.phase !== 'count');
+  const askForMe = () => askForMeIn(mem);
   const startLabel = () => (mem && mem.phase === 'play' ? 'ابدأ من جديد' : mem && mem.phase === 'done' ? 'العب كمان مرة' : 'ابدأ اللعبة');
 
   // العد التنازلي وقت ما الكروت مكشوفة
@@ -815,36 +884,34 @@ canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block
     if (!st.classList.contains('warn')) st.textContent = memStatus();
   }
 
-  let askShown = '';
-  let askNotice = false;
-  function renderAsk() {
-    const box = $('mem-ask');
-    const ask = mem.ask;
-    let mode = '';
-    if (ask && mem.phase !== 'preview') {
-      if (isMe(ask)) mode = 'wait';
-      else if (askForMe()) mode = 'ask';
-    }
-    box.hidden = !mode;
-    $('mem-yes').hidden = $('mem-no').hidden = mode !== 'ask';
-    $('mem-cancel').hidden = mode !== 'wait';
-    if (mode === 'ask') {
-      $('mem-ask-text').textContent = ask.name + ' بدّه يبلّش لعبة. مستعد؟';
-      $('mem-yes').textContent = 'نعم';
-    } else if (mode === 'wait') {
-      $('mem-ask-text').textContent = 'بعتنا لصاحبك، استنينا يضغط «نعم»…';
-    }
-    const key = mode && mode + ':' + ask.pid;
-    if (key && key !== askShown && tab === 'mem') (mode === 'ask' ? $('mem-yes') : $('mem-cancel')).focus();
-    askShown = key;
-    // إذا إنت بتبويب ثاني، بنخبرك فوق
-    if (mode === 'ask' && tab !== 'mem') {
-      showNotice(ask.name + ' بدّه يلعب «ذاكرة الإيموجي» معك. افتح التبويب واضغط «نعم» إذا إنت مستعد.');
-      askNotice = true;
-    } else if (askNotice) {
-      showNotice(''); askNotice = false;
-    }
+  const askUi = {};
+  let noticeOwner = '';
+  function setNotice(owner, text) {
+    if (text) { showNotice(text); noticeOwner = owner; }
+    else if (noticeOwner === owner) { showNotice(''); noticeOwner = ''; }
   }
+  // نافذة «مستعد؟ نعم / لا» فوق لوحة اللعبة
+  function renderAskFor(game, st, gameName) {
+    const ui = askUi[game] || (askUi[game] = { shown: '' });
+    const ask = st.ask;
+    let mode = '';
+    if (ask && st.phase !== 'preview' && st.phase !== 'count') {
+      if (isMe(ask)) mode = 'wait';
+      else if (askForMeIn(st)) mode = 'ask';
+    }
+    $(game + '-ask').hidden = !mode;
+    $(game + '-yes').hidden = $(game + '-no').hidden = mode !== 'ask';
+    $(game + '-cancel').hidden = mode !== 'wait';
+    if (mode === 'ask') $(game + '-ask-text').textContent = ask.name + ' بدّه يبلّش لعبة. مستعد؟';
+    else if (mode === 'wait') $(game + '-ask-text').textContent = 'بعتنا لصاحبك، استنينا يضغط «نعم»…';
+    const key = mode && mode + ':' + ask.pid;
+    if (key && key !== ui.shown && tab === game) (mode === 'ask' ? $(game + '-yes') : $(game + '-cancel')).focus();
+    ui.shown = key;
+    // إذا إنت بتبويب ثاني، بنخبرك فوق
+    if (mode === 'ask' && tab !== game) setNotice(game, ask.name + ' بدّه يلعب «' + gameName + '» معك. افتح التبويب واضغط «نعم» إذا إنت مستعد.');
+    else setNotice(game, '');
+  }
+  const renderAsk = () => renderAskFor('mem', mem, 'ذاكرة الإيموجي');
 
   function memStatus() {
     if (mem.phase === 'preview') {
@@ -905,6 +972,182 @@ canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block
     const st = $('mem-status');
     if (!st.classList.contains('warn')) st.textContent = memStatus();
   }
+
+  // ---------- الحية ----------
+  const scv = $('snake-cv'), sctx = scv.getContext('2d');
+  const SN_V = { u: [0, -1], d: [0, 1], l: [-1, 0], r: [1, 0] };
+  const snakeMine = () => (snake && me ? snake.players.find((p) => p.pid === me.pid) : null);
+  const snakeLive = () => !!(snake && (snake.phase === 'play' || snake.phase === 'count'));
+
+  function snakeResize() {
+    const r = scv.getBoundingClientRect(); if (!r.width) return;
+    const dpr = Math.min(window.devicePixelRatio || 1, 2.5);
+    const pw = Math.round(r.width * dpr), ph = Math.round(r.height * dpr);
+    if (scv.width !== pw || scv.height !== ph) { scv.width = pw; scv.height = ph; drawSnake(); }
+  }
+  new ResizeObserver(snakeResize).observe(scv);
+
+  function drawSnake() {
+    const g = snake; if (!g || !scv.width) return;
+    const cw = scv.width / g.w, ch = scv.height / g.h;
+    sctx.setTransform(1, 0, 0, 1, 0, 0);
+    sctx.globalAlpha = 1;
+    sctx.clearRect(0, 0, scv.width, scv.height);
+    // نقاط خفيفة زي الطبشور
+    sctx.fillStyle = 'rgba(242, 239, 230, .08)';
+    const dot = Math.max(1.5, cw * .07);
+    for (let y = 0; y < g.h; y++) for (let x = 0; x < g.w; x++) sctx.fillRect((x + .5) * cw - dot / 2, (y + .5) * ch - dot / 2, dot, dot);
+    // الدائرة، وحواليها حلقة بتنقص لحد ما تنقل لمكان ثاني
+    if (g.food !== null && g.food !== undefined) {
+      const fx = (g.food % g.w + .5) * cw, fy = (Math.floor(g.food / g.w) + .5) * ch;
+      sctx.beginPath(); sctx.arc(fx, fy, cw * .36, 0, Math.PI * 2);
+      sctx.fillStyle = '#FF7A6B'; sctx.fill();
+      if (g.phase === 'play' && g.foodMs) {
+        const p = Math.max(0, Math.min(1, g.foodLeft / g.foodMs));
+        sctx.beginPath(); sctx.arc(fx, fy, cw * .62, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * p);
+        sctx.strokeStyle = 'rgba(255, 122, 107, .55)'; sctx.lineWidth = Math.max(1.5, cw * .08); sctx.stroke();
+      }
+    }
+    // الحيات
+    const blink = Math.floor(Date.now() / 160) % 2;
+    const box = (x, y, w, h, r) => {
+      sctx.beginPath();
+      if (sctx.roundRect) sctx.roundRect(x, y, w, h, r); else sctx.rect(x, y, w, h);
+      sctx.fill();
+    };
+    for (const p of g.players) {
+      if (!p.body.length) continue;
+      sctx.globalAlpha = p.safe ? (blink ? .3 : .75) : 1;
+      sctx.fillStyle = p.color;
+      for (let i = p.body.length - 1; i >= 0; i--) {
+        const c = p.body[i], x = c % g.w, y = Math.floor(c / g.w);
+        const pad = i === 0 ? cw * .03 : cw * .12;
+        box(x * cw + pad, y * ch + pad, cw - pad * 2, ch - pad * 2, cw * .3);
+      }
+      // العيون
+      const h = p.body[0], hx = (h % g.w + .5) * cw, hy = (Math.floor(h / g.w) + .5) * ch;
+      const [dx, dy] = SN_V[p.dir] || [1, 0];
+      sctx.fillStyle = '#1C2925';
+      for (const side of [-1, 1]) {
+        sctx.beginPath();
+        sctx.arc(hx + dx * cw * .16 - dy * side * cw * .2, hy + dy * ch * .16 + dx * side * ch * .2, cw * .09, 0, Math.PI * 2);
+        sctx.fill();
+      }
+      // الاسم جنب الراس، من الجهة اللي ما فيها جسم
+      let below = p.dir === 'd';
+      if (!below && hy < ch * 1.6) below = true;
+      else if (below && hy > scv.height - ch * 1.6) below = false;
+      const label = isMe(p) ? 'إنت' : p.name;
+      const lx = Math.min(scv.width - cw * 2, Math.max(cw * 2, hx));
+      const ly = below ? hy + ch * .62 : hy - ch * .62;
+      sctx.font = '700 ' + Math.max(11, Math.round(cw * .6)) + 'px "Baloo Bhaijaan 2", Tahoma, sans-serif';
+      sctx.textAlign = 'center'; sctx.textBaseline = below ? 'top' : 'bottom';
+      sctx.lineJoin = 'round'; sctx.lineWidth = Math.max(3, cw * .18);
+      sctx.strokeStyle = 'rgba(30, 50, 42, .9)';
+      sctx.strokeText(label, lx, ly);
+      sctx.fillStyle = p.color;
+      sctx.fillText(label, lx, ly);
+    }
+    sctx.globalAlpha = 1;
+  }
+
+  // العد التنازلي قبل البداية
+  let snCountEnd = 0, snCountTimer = null, snGoUntil = 0;
+  function snakeCountdown() {
+    if (snake.phase === 'count') {
+      const end = performance.now() + (snake.count || 0);
+      if (!snCountTimer || Math.abs(end - snCountEnd) > 400) {
+        snCountEnd = end;
+        clearInterval(snCountTimer);
+        snCountTimer = setInterval(snakeUi, 150);
+      }
+    } else if (snCountTimer) {
+      clearInterval(snCountTimer); snCountTimer = null;
+      if (snake.phase === 'play') snGoUntil = performance.now() + 700;
+    }
+    snakeUi();
+  }
+  function snakeUi() {
+    let t = '';
+    if (snake.phase === 'count') t = String(Math.max(1, Math.ceil((snCountEnd - performance.now()) / 1000)));
+    else if (snake.phase === 'play' && performance.now() < snGoUntil) t = 'يلا!';
+    $('snake-big').textContent = t;
+    $('snake-big').hidden = !t;
+    const st = $('snake-status');
+    if (!st.classList.contains('warn')) st.textContent = snakeStatus();
+  }
+  function snakeStatus() {
+    const g = snake, mine = snakeMine();
+    if (askForMeIn(g)) return g.ask.name + ' بيسألك إذا إنت مستعد';
+    if (g.ask && isMe(g.ask)) return 'استنينا صاحبك يوافق…';
+    if (g.phase === 'count') return mine ? 'استعد، واختار وين بدك تمشي' : 'الجولة رح تبلّش، اضغط «ادخل معهم» إذا بدك تلعب';
+    if (g.phase === 'play') return mine ? 'كُل الدوائر وكبّر حيّتك! طولك ' + mine.len : 'عم يلعبوا، بتقدر تتفرج';
+    if (g.phase === 'over' && g.winner) {
+      const w = g.winner;
+      if (w.draw) return 'تعادل بين ' + w.names.join(' و') + '، الطول ' + w.len + ' 🎉';
+      return (me && w.pids.includes(me.pid) ? 'فزت! 🎉' : 'فاز ' + w.names[0] + ' 🎉') + ' الطول ' + w.len;
+    }
+    return 'كُلوا الدوائر وكبّروا حيّاتكم. اللي بيوصل طوله ' + g.winLen + ' أول بيفوز';
+  }
+  function snakeStartLabel() {
+    const g = snake;
+    if (g.phase === 'count') return snakeMine() ? 'استعد…' : 'ادخل معهم';
+    if (g.phase === 'play') return 'ابدأ من جديد';
+    if (g.phase === 'over') return 'العب كمان مرة';
+    return 'ابدأ اللعبة';
+  }
+  function renderSnake() {
+    if (!snake) return;
+    const g = snake;
+    renderAskFor('snake', g, 'الحية');
+    snakeCountdown();
+    drawSnake();
+    const sc = document.createDocumentFragment();
+    for (const p of [...g.players].sort((a, c) => c.len - a.len)) {
+      const li = el('li', 'person seat');
+      li.style.setProperty('--pc', p.color);
+      li.append(el('span', 'av', String(p.len)), el('span', '', isMe(p) ? 'إنت' : p.name));
+      sc.appendChild(li);
+    }
+    $('snake-scores').replaceChildren(sc);
+    const sec = Math.ceil((g.phase === 'play' ? g.left : g.phase === 'over' ? 0 : g.roundMs) / 1000);
+    $('snake-info').replaceChildren(
+      el('li', 'chip', 'الوقت: ' + Math.floor(sec / 60) + ':' + String(sec % 60).padStart(2, '0')),
+      el('li', 'chip', 'الهدف: طول ' + g.winLen)
+    );
+    const btn = $('snake-start');
+    btn.textContent = snakeStartLabel();
+    btn.disabled = !!(g.ask && isMe(g.ask)) || (g.phase === 'count' && !!snakeMine());
+  }
+  function snakeTurn(d) {
+    if (!snakeLive() || !snakeMine()) return;
+    socket.emit('snake:dir', d);
+  }
+  $('snake-start').addEventListener('click', () => socket.emit('snake:start'));
+  $('snake-yes').addEventListener('click', () => socket.emit('snake:answer', true));
+  $('snake-no').addEventListener('click', () => socket.emit('snake:answer', false));
+  $('snake-cancel').addEventListener('click', () => socket.emit('snake:cancel'));
+  // أسهم الموبايل
+  for (const b of $('snake-pad').querySelectorAll('button')) {
+    b.addEventListener('pointerdown', (e) => { e.preventDefault(); snakeTurn(b.dataset.d); });
+    b.addEventListener('click', (e) => { if (e.detail === 0) snakeTurn(b.dataset.d); }); // من الكيبورد
+  }
+  // السحب بالإصبع على اللوحة
+  let swipe = null;
+  scv.addEventListener('pointerdown', (e) => {
+    swipe = { x: e.clientX, y: e.clientY, id: e.pointerId };
+    try { scv.setPointerCapture(e.pointerId); } catch (_) {}
+  });
+  scv.addEventListener('pointermove', (e) => {
+    if (!swipe || e.pointerId !== swipe.id) return;
+    const dx = e.clientX - swipe.x, dy = e.clientY - swipe.y;
+    if (Math.max(Math.abs(dx), Math.abs(dy)) < 22) return;
+    snakeTurn(Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 'r' : 'l') : (dy > 0 ? 'd' : 'u'));
+    swipe.x = e.clientX; swipe.y = e.clientY;
+  });
+  const swipeEnd = (e) => { if (swipe && e.pointerId === swipe.id) swipe = null; };
+  scv.addEventListener('pointerup', swipeEnd);
+  scv.addEventListener('pointercancel', swipeEnd);
 
   // ---------- الناس والمؤشرات ----------
   function renderPeople() {
@@ -1057,6 +1300,10 @@ canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block
     if (e.key === 'Escape') {
       if (closePicker()) emoBtn.focus();
       closeConfirm();
+    }
+    if (tab === 'snake' && snakeLive() && snakeMine() && !e.ctrlKey && !e.metaKey && !e.altKey) {
+      const d = { ArrowUp: 'u', ArrowDown: 'd', ArrowLeft: 'l', ArrowRight: 'r' }[e.key] || { KeyW: 'u', KeyS: 'd', KeyA: 'l', KeyD: 'r' }[e.code];
+      if (d) { e.preventDefault(); snakeTurn(d); return; }
     }
     if (tab === 'draw' && (e.ctrlKey || e.metaKey) && !e.shiftKey && (e.key === 'z' || e.key === 'Z' || e.code === 'KeyZ')) { e.preventDefault(); undo(); }
   });
