@@ -54,6 +54,11 @@ const SN_DIRS = { u: [0, -1], d: [0, 1], l: [-1, 0], r: [1, 0] };
 const SN_OPP = { u: 'd', d: 'u', l: 'r', r: 'l' };
 const SN_COLORS = ['#F5D76E', '#93CFEE', '#F2A0BE', '#F4A96A', '#F2EFE6', '#C9A7F0', '#A9DFA0', '#7FE0D6'];
 
+// لعبة التلوين: أسماء الرسومات (لازم تكون نفس اللي بـ public/board.html)
+const PAINT_PICS = new Set(['house', 'flower', 'tree', 'car', 'fish', 'butterfly', 'rocket', 'cat']);
+const PAINT_REGION = /^[a-z0-9]{1,8}$/;
+const PAINT_MAX = 120; // أقصى عدد أجزاء ملوّنة بالرسمة الوحدة
+
 // ---------- التحقق من البيانات القادمة من المتصفح ----------
 function cleanPts(p, max) {
   if (!Array.isArray(p) || p.length % 2 !== 0 || p.length > max) return null;
@@ -275,6 +280,11 @@ function publicSnake(b) {
     ask: g.ask ? { pid: g.ask.pid, name: g.ask.name, no: [...g.ask.no].map((cid) => b.pids.get(cid)) } : null
   };
 }
+function publicPaint(b) {
+  const fills = {};
+  for (const [pic, m] of b.paint.fills) fills[pic] = Object.fromEntries(m);
+  return { pic: b.paint.pic, fills };
+}
 function emitSnake(b, room) {
   io.to(room).emit('snake', publicSnake(b));
 }
@@ -372,7 +382,8 @@ function newBoard(strokes) {
     pids: new Map(),   // cid -> رقم عام للاعب (ما بنكشف الـ cid للباقيين)
     xo: newXo(),
     mem: newMem(),
-    snake: newSnake()
+    snake: newSnake(),
+    paint: { pic: 'house', fills: new Map() } // pic -> Map(جزء -> لون)
   };
 }
 function getBoard(room) {
@@ -469,7 +480,8 @@ io.on('connection', (socket) => {
     users: publicUsers(b),
     xo: publicXo(b),
     mem: publicMem(b),
-    snake: publicSnake(b)
+    snake: publicSnake(b),
+    paint: publicPaint(b)
   });
   socket.to(room).emit('users', publicUsers(b));
 
@@ -727,6 +739,33 @@ io.on('connection', (socket) => {
     const last = s.queue.length ? s.queue[s.queue.length - 1] : s.dir;
     if (d === last || d === SN_OPP[last] || s.queue.length >= 2) return;
     s.queue.push(d);
+  });
+
+  // ---------- التلوين ----------
+  socket.on('paint:fill', (d) => {
+    if (!d || !PAINT_PICS.has(d.pic) || typeof d.r !== 'string' || !PAINT_REGION.test(d.r)) return;
+    if (d.c !== null && !HEX.test(d.c)) return;
+    let f = b.paint.fills.get(d.pic);
+    if (!f) { f = new Map(); b.paint.fills.set(d.pic, f); }
+    if (d.c === null) f.delete(d.r);
+    else {
+      if (!f.has(d.r) && f.size >= PAINT_MAX) return;
+      f.set(d.r, d.c);
+    }
+    socket.to(room).emit('paint:fill', { pic: d.pic, r: d.r, c: d.c });
+  });
+
+  // تغيير الرسمة بيصير عند الكل، عشان تلوّنوا مع بعض
+  socket.on('paint:pic', (pic) => {
+    if (!PAINT_PICS.has(pic) || b.paint.pic === pic) return;
+    b.paint.pic = pic;
+    socket.to(room).emit('paint:pic', { pic, by: user.name });
+  });
+
+  socket.on('paint:clear', (pic) => {
+    if (!PAINT_PICS.has(pic)) return;
+    b.paint.fills.delete(pic);
+    io.to(room).emit('paint:clear', { pic, by: user.name });
   });
 
   // ---------- الاسم والخروج ----------
