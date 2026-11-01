@@ -55,9 +55,10 @@ const SN_OPP = { u: 'd', d: 'u', l: 'r', r: 'l' };
 const SN_COLORS = ['#F5D76E', '#93CFEE', '#F2A0BE', '#F4A96A', '#F2EFE6', '#C9A7F0', '#A9DFA0', '#7FE0D6'];
 
 // لعبة التلوين: أسماء الرسومات (لازم تكون نفس اللي بـ public/board.html)
-const PAINT_PICS = new Set(['house', 'flower', 'tree', 'car', 'fish', 'butterfly', 'rocket', 'cat']);
+const PAINT_PICS = new Set(['house', 'flower', 'tree', 'car', 'fish', 'butterfly', 'rocket', 'cat',
+  'mandala', 'peacock', 'owl', 'castle', 'ship', 'train', 'sea', 'land', 'lantern', 'olive']);
 const PAINT_REGION = /^[a-z0-9]{1,8}$/;
-const PAINT_MAX = 120; // أقصى عدد أجزاء ملوّنة بالرسمة الوحدة
+const PAINT_MAX = 300; // أقصى عدد أجزاء ملوّنة بالرسمة الوحدة
 
 // ---------- التحقق من البيانات القادمة من المتصفح ----------
 function cleanPts(p, max) {
