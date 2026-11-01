@@ -1,4 +1,4 @@
-// منقوشة: سبورة رسم مشتركة لحظية + ألعاب (Express + Socket.io)
+// منقوشة بزيت وزعتر: سبورة رسم مشتركة لحظية + ألعاب (Express + Socket.io)
 // التشغيل: npm install ثم npm start  ← http://localhost:3000
 
 const path = require('path');
@@ -38,6 +38,21 @@ const MEM_PREVIEW_MS = 5000;   // كم بتضل الكروت مكشوفة أول
 const MEM_ASK_MS = 30000;      // كم بنستنى الثاني يرد على «مستعد؟»
 const MEM_POOL = ['🐶', '🐱', '🐭', '🐰', '🦊', '🐻', '🐼', '🐸', '🐵', '🦁', '🐯', '🐮', '🐷', '🐔', '🐧',
   '🦋', '🍎', '🍉', '🍇', '🍓', '🍌', '🍕', '🍩', '⚽', '🚗', '🌙', '🌈', '🎈', '🎁', '🚀'];
+
+// لعبة الحية
+const SN = {
+  W: 28, H: 28,          // حجم اللوحة بالمربعات
+  TICK: 110,             // كل كم ملي ثانية بتتحرك الحيات خطوة
+  START_LEN: 3,          // طول الحية أول ما تبلّش أو ترجع صغيرة
+  WIN_LEN: 20,           // اللي بيوصل لهالطول أول بيفوز
+  ROUND_MS: 120000,      // مدة الجولة (دقيقتين)، وبعدها الأطول بيفوز
+  FOOD_MOVE_MS: 7000,    // إذا ما حدا أكل الدائرة، بتنقل لمكان ثاني
+  SAFE_MS: 1500,         // بعد ما ترجع صغيرة بتكون محمية شوي
+  COUNT_MS: 3000         // العد التنازلي قبل البداية
+};
+const SN_DIRS = { u: [0, -1], d: [0, 1], l: [-1, 0], r: [1, 0] };
+const SN_OPP = { u: 'd', d: 'u', l: 'r', r: 'l' };
+const SN_COLORS = ['#F5D76E', '#93CFEE', '#F2A0BE', '#F4A96A', '#F2EFE6', '#C9A7F0', '#A9DFA0', '#7FE0D6'];
 
 // ---------- التحقق من البيانات القادمة من المتصفح ----------
 function cleanPts(p, max) {
@@ -178,6 +193,176 @@ function memCancelAsk(b, room, note) {
   emitMem(b, room);
 }
 
+// ---------- الحية ----------
+function newSnake() {
+  return {
+    phase: 'idle',        // idle | count: عد تنازلي | play | over
+    players: new Map(),   // cid -> { pid, name, color, body: [خانات، الراس أول وحدة], dir, queue, safeUntil }
+    food: null,           // رقم الخانة اللي فيها الدائرة
+    foodAt: 0,
+    startAt: 0,
+    endsAt: 0,
+    winner: null,
+    ask: null,
+    askTimer: null,
+    countTimer: null,
+    loop: null
+  };
+}
+function stopSnake(g) {
+  clearInterval(g.loop);
+  clearTimeout(g.countTimer);
+  clearTimeout(g.askTimer);
+}
+function snakeOccupied(g, except) {
+  const occ = new Set();
+  for (const s of g.players.values()) if (s !== except) for (const c of s.body) occ.add(c);
+  return occ;
+}
+const snCell = (x, y) => ((y + SN.H) % SN.H) * SN.W + ((x + SN.W) % SN.W);
+
+// بنحط الحية بمكان فاضي، صغيرة، وقدامها شوية مكان
+function snakeSpawn(g, s) {
+  const occ = snakeOccupied(g, s);
+  for (let t = 0; t < 300; t++) {
+    const x = crypto.randomInt(SN.W), y = crypto.randomInt(SN.H);
+    const dir = 'udlr'[crypto.randomInt(4)];
+    const [dx, dy] = SN_DIRS[dir];
+    const body = [];
+    let ok = true;
+    for (let i = -4; i < SN.START_LEN && ok; i++) {
+      const c = snCell(x - dx * i, y - dy * i);
+      if (occ.has(c) || c === g.food) ok = false;
+      else if (i >= 0) body.push(c);
+    }
+    if (ok) { s.body = body; s.dir = dir; s.queue = []; return; }
+  }
+  s.body = [snCell(crypto.randomInt(SN.W), crypto.randomInt(SN.H))];
+  s.dir = 'r'; s.queue = [];
+}
+function snakeFood(g) {
+  const occ = snakeOccupied(g);
+  g.food = null;
+  for (let t = 0; t < 600; t++) {
+    const c = crypto.randomInt(SN.W * SN.H);
+    if (!occ.has(c)) { g.food = c; break; }
+  }
+  g.foodAt = Date.now();
+}
+function snakeAdd(b, g, cid) {
+  if (g.players.has(cid)) return;
+  const u = [...b.users.values()].find((x) => x.cid === cid);
+  if (!u) return;
+  const s = { pid: b.pids.get(cid), name: u.name, color: SN_COLORS[g.players.size % SN_COLORS.length], body: [], dir: 'r', queue: [], safeUntil: 0 };
+  g.players.set(cid, s);
+  snakeSpawn(g, s);
+}
+function publicSnake(b) {
+  const g = b.snake;
+  const now = Date.now();
+  return {
+    phase: g.phase,
+    w: SN.W, h: SN.H, winLen: SN.WIN_LEN, roundMs: SN.ROUND_MS,
+    food: g.food,
+    foodLeft: g.phase === 'play' && g.food !== null ? Math.max(0, g.foodAt + SN.FOOD_MOVE_MS - now) : 0,
+    foodMs: SN.FOOD_MOVE_MS,
+    players: [...g.players.values()].map((s) => ({
+      pid: s.pid, name: s.name, color: s.color, body: s.body, dir: s.dir, len: s.body.length, safe: s.safeUntil > now
+    })),
+    left: g.phase === 'play' ? Math.max(0, g.endsAt - now) : 0,
+    count: g.phase === 'count' ? Math.max(0, g.startAt - now) : 0,
+    winner: g.winner,
+    ask: g.ask ? { pid: g.ask.pid, name: g.ask.name, no: [...g.ask.no].map((cid) => b.pids.get(cid)) } : null
+  };
+}
+function emitSnake(b, room) {
+  io.to(room).emit('snake', publicSnake(b));
+}
+function snakeCancelAsk(b, room, note) {
+  const g = b.snake;
+  if (!g.ask) return;
+  const ask = g.ask;
+  clearTimeout(g.askTimer);
+  g.ask = null;
+  if (note) tellCid(b, ask.cid, 'snake', note);
+  emitSnake(b, room);
+}
+// بداية جولة: عد تنازلي 3 ثواني وبعدين بتتحرك الحيات
+function snakeBegin(b, room, cids) {
+  stopSnake(b.snake);
+  const g = newSnake();
+  b.snake = g;
+  g.phase = 'count';
+  g.startAt = Date.now() + SN.COUNT_MS;
+  for (const cid of cids) snakeAdd(b, g, cid);
+  g.countTimer = setTimeout(() => {
+    if (b.snake !== g) return;
+    if (!g.players.size) { g.phase = 'idle'; emitSnake(b, room); return; }
+    g.phase = 'play';
+    g.endsAt = Date.now() + SN.ROUND_MS;
+    snakeFood(g);
+    g.loop = setInterval(() => snakeTick(b, room, g), SN.TICK);
+    emitSnake(b, room);
+  }, SN.COUNT_MS);
+  emitSnake(b, room);
+}
+function snakeEnd(b, room, g) {
+  clearInterval(g.loop);
+  g.phase = 'over';
+  const list = [...g.players.values()];
+  const best = Math.max(0, ...list.map((s) => s.body.length));
+  const top = list.filter((s) => s.body.length === best);
+  g.winner = { pids: top.map((s) => s.pid), names: top.map((s) => s.name), len: best, draw: top.length > 1 };
+  emitSnake(b, room);
+}
+function snakeTick(b, room, g) {
+  if (b.snake !== g || g.phase !== 'play') { clearInterval(g.loop); return; }
+  const now = Date.now();
+  const list = [...g.players.values()];
+  let ate = false;
+
+  // كل حية بتمشي خطوة (والحيطان بترجعك من الجهة الثانية)
+  for (const s of list) {
+    if (s.queue.length) s.dir = s.queue.shift();
+    const h = s.body[0];
+    const [dx, dy] = SN_DIRS[s.dir];
+    const nh = snCell((h % SN.W) + dx, Math.floor(h / SN.W) + dy);
+    s.body.unshift(nh);
+    if (nh === g.food) ate = true; // أكلت: ما بنقصّ الذيل فبتطول خانة
+    else s.body.pop();
+  }
+
+  // الخبط: إذا راسك خبط بجسم حية ثانية، هي اللي بترجع صغيرة. راس براس: الاثنين
+  const reset = new Set();
+  const notes = [];
+  for (const a of list) {
+    if (a.safeUntil > now) continue;
+    for (const v of list) {
+      if (v === a || v.safeUntil > now) continue;
+      const i = v.body.indexOf(a.body[0]);
+      if (i === 0) {
+        if (!reset.has(a) || !reset.has(v)) notes.push('راس براس! ' + a.name + ' و' + v.name + ' رجعوا صغار');
+        reset.add(a); reset.add(v);
+      } else if (i > 0) {
+        reset.add(v);
+        notes.push(a.name + ' خبط بـ' + v.name + '، ورجع ' + v.name + ' صغير');
+      }
+    }
+  }
+  for (const s of reset) {
+    snakeSpawn(g, s);
+    s.safeUntil = now + SN.SAFE_MS;
+  }
+  if (notes.length) io.to(room).emit('game:msg', { game: 'snake', text: notes[0] });
+
+  // الدائرة: إذا انأكلت أو طوّلت بمكانها، بتنقل
+  if (ate || g.food === null || now - g.foodAt >= SN.FOOD_MOVE_MS) snakeFood(g);
+
+  // الفوز: أول واحد بيوصل للطول المطلوب، أو الأطول لما يخلص الوقت
+  if (list.some((s) => s.body.length >= SN.WIN_LEN) || now >= g.endsAt) { snakeEnd(b, room, g); return; }
+  emitSnake(b, room);
+}
+
 // ---------- اللوحات ----------
 const boards = new Map(); // room -> board
 
@@ -186,7 +371,8 @@ function newBoard(strokes) {
     strokes: strokes || [], live: new Map(), users: new Map(), guestN: 0, colorN: 0,
     pids: new Map(),   // cid -> رقم عام للاعب (ما بنكشف الـ cid للباقيين)
     xo: newXo(),
-    mem: newMem()
+    mem: newMem(),
+    snake: newSnake()
   };
 }
 function getBoard(room) {
@@ -282,7 +468,8 @@ io.on('connection', (socket) => {
     live: [...b.live.values()],
     users: publicUsers(b),
     xo: publicXo(b),
-    mem: publicMem(b)
+    mem: publicMem(b),
+    snake: publicSnake(b)
   });
   socket.to(room).emit('users', publicUsers(b));
 
@@ -492,6 +679,56 @@ io.on('connection', (socket) => {
     if (b.mem.ask && b.mem.ask.cid === clientId) memCancelAsk(b, room);
   });
 
+  // ---------- الحية ----------
+  socket.on('snake:start', () => {
+    const g = b.snake;
+    if (g.phase === 'count') { // الجولة على وشك تبلّش: بتدخل معهم
+      if (!g.players.has(clientId)) { snakeAdd(b, g, clientId); emitSnake(b, room); }
+      return;
+    }
+    if (g.ask) {
+      if (g.ask.cid !== clientId) snakeBegin(b, room, [g.ask.cid, clientId]);
+      return;
+    }
+    if (!othersHere()) { snakeBegin(b, room, [clientId]); return; }
+    g.ask = { cid: clientId, pid, name: user.name, no: new Set() };
+    g.askTimer = setTimeout(() => {
+      if (b.snake === g && g.ask) snakeCancelAsk(b, room, 'ما حدا ردّ، جرّب كمان مرة');
+    }, MEM_ASK_MS);
+    emitSnake(b, room);
+  });
+
+  socket.on('snake:answer', (yes) => {
+    const g = b.snake;
+    if (!g.ask || g.ask.cid === clientId) return;
+    if (yes === true) { snakeBegin(b, room, [g.ask.cid, clientId]); return; }
+    g.ask.no.add(clientId);
+    tellCid(b, g.ask.cid, 'snake', user.name + ' مش جاهز هلأ');
+    const others = otherCids(b, g.ask.cid);
+    if ([...others].every((c) => g.ask.no.has(c))) snakeCancelAsk(b, room);
+    else emitSnake(b, room);
+  });
+
+  socket.on('snake:cancel', () => {
+    if (b.snake.ask && b.snake.ask.cid === clientId) snakeCancelAsk(b, room);
+  });
+
+  socket.on('snake:dir', (d) => {
+    const g = b.snake;
+    const s = g.players.get(clientId);
+    if (!s || !SN_DIRS[d] || (g.phase !== 'play' && g.phase !== 'count')) return;
+    if (g.phase === 'count') { // قبل البداية بتختار وين بدك تمشي
+      const [dx, dy] = SN_DIRS[d];
+      if (s.body.length > 1 && snCell((s.body[0] % SN.W) + dx, Math.floor(s.body[0] / SN.W) + dy) === s.body[1]) return;
+      s.dir = d;
+      emitSnake(b, room);
+      return;
+    }
+    const last = s.queue.length ? s.queue[s.queue.length - 1] : s.dir;
+    if (d === last || d === SN_OPP[last] || s.queue.length >= 2) return;
+    s.queue.push(d);
+  });
+
   // ---------- الاسم والخروج ----------
   socket.on('rename', (n) => {
     const name = cleanName(n);
@@ -502,9 +739,13 @@ io.on('connection', (socket) => {
     if (sc) sc.name = name;
     if (b.mem.lock && b.mem.lock.cid === clientId) b.mem.lock.name = name;
     if (b.mem.ask && b.mem.ask.cid === clientId) b.mem.ask.name = name;
+    const sp = b.snake.players.get(clientId);
+    if (sp) sp.name = name;
+    if (b.snake.ask && b.snake.ask.cid === clientId) b.snake.ask.name = name;
     io.to(room).emit('users', publicUsers(b));
     io.to(room).emit('xo', publicXo(b));
     io.to(room).emit('mem', publicMem(b));
+    emitSnake(b, room);
   });
 
   socket.on('disconnect', () => {
@@ -531,13 +772,32 @@ io.on('connection', (socket) => {
       else if ([...others].every((c) => ask.no.has(c))) memCancelAsk(b, room);
     }
 
+    // الحية: إذا طلع لاعب بنشيل حيته، وإذا ما ضل لاعبين بنوقف الجولة
+    const g = b.snake;
+    if (!isHere(clientId) && g.players.delete(clientId)) {
+      if (!g.players.size && (g.phase === 'play' || g.phase === 'count')) {
+        stopSnake(g);
+        g.phase = 'idle';
+        g.food = null;
+      }
+      emitSnake(b, room);
+    }
+    const sAsk = g.ask;
+    if (sAsk) {
+      const others = otherCids(b, sAsk.cid);
+      if (sAsk.cid === clientId && !isHere(clientId)) snakeCancelAsk(b, room);
+      else if (!others.size) snakeCancelAsk(b, room, 'صاحبك طلع، اضغط «ابدأ اللعبة» لتلعب لحالك');
+      else if ([...others].every((c) => sAsk.no.has(c))) snakeCancelAsk(b, room);
+    }
+
     if (!b.users.size && !b.strokes.length && room !== 'main') {
       clearMemTimers(b.mem);
+      stopSnake(b.snake);
       boards.delete(room);
     }
   });
 });
 
 server.listen(PORT, () => {
-  console.log('منقوشة شغالة على http://localhost:' + PORT);
+  console.log('منقوشة بزيت وزعتر شغالة على http://localhost:' + PORT);
 });
