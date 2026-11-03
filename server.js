@@ -122,6 +122,48 @@ function publicXo(b) {
   return { cells: x.cells, turn: x.turn, winner: x.winner, line: x.line, score: x.score, seats: { X: seat('X'), O: seat('O') } };
 }
 
+// أربعة بخط: لوحة 7 أعمدة × 6 صفوف، القرص بينزل لأول مكان فاضي بالعمود
+const C4_W = 7;
+const C4_H = 6;
+const C4_DIRS = [[0, 1], [1, 0], [1, 1], [1, -1]]; // عرضي، طولي، مايل، مايل بالعكس
+function newC4() {
+  return {
+    cells: Array(C4_W * C4_H).fill(''), // 'R' أحمر | 'Y' أصفر، من فوق لتحت ومن العمود الأول
+    first: 'R',                          // مين بيبلّش الجولة (بيتبادلوا كل جولة)
+    turn: 'R',
+    seats: { R: null, Y: null },         // { cid, pid, name }
+    winner: null,                        // 'R' | 'Y' | 'draw'
+    line: null,                          // الخانات اللي صفّت
+    last: null,                          // آخر خانة انلعبت (عشان حركة النزول)
+    score: { R: 0, Y: 0, draw: 0 }
+  };
+}
+function c4Line(cells, i) {
+  const k = cells[i];
+  const r0 = Math.floor(i / C4_W), c0 = i % C4_W;
+  for (const [dr, dc] of C4_DIRS) {
+    const line = [i];
+    for (const s of [1, -1]) {
+      let r = r0 + dr * s, c = c0 + dc * s;
+      while (r >= 0 && r < C4_H && c >= 0 && c < C4_W && cells[r * C4_W + c] === k) {
+        line.push(r * C4_W + c);
+        r += dr * s; c += dc * s;
+      }
+    }
+    if (line.length >= 4) return line;
+  }
+  return null;
+}
+function publicC4(b) {
+  const g = b.c4;
+  const seat = (k) => (g.seats[k] ? { pid: g.seats[k].pid, name: g.seats[k].name } : null);
+  return {
+    w: C4_W, h: C4_H, cells: g.cells, turn: g.turn, winner: g.winner, line: g.line, last: g.last,
+    score: g.score, seats: { R: seat('R'), Y: seat('Y') }
+  };
+}
+const C4_NAMES = { R: 'الأحمر', Y: 'الأصفر' };
+
 function newMem() {
   const picks = shuffle(MEM_POOL.slice()).slice(0, MEM_PAIRS);
   return {
@@ -382,6 +424,7 @@ function newBoard(strokes) {
     strokes: strokes || [], live: new Map(), users: new Map(), guestN: 0, colorN: 0,
     pids: new Map(),   // cid -> رقم عام للاعب (ما بنكشف الـ cid للباقيين)
     xo: newXo(),
+    c4: newC4(),
     mem: newMem(),
     snake: newSnake(),
     paint: { pic: 'house', fills: new Map() } // pic -> Map(جزء -> لون)
@@ -480,6 +523,7 @@ io.on('connection', (socket) => {
     live: [...b.live.values()],
     users: publicUsers(b),
     xo: publicXo(b),
+    c4: publicC4(b),
     mem: publicMem(b),
     snake: publicSnake(b),
     paint: publicPaint(b)
@@ -604,6 +648,53 @@ io.on('connection', (socket) => {
   socket.on('xo:reset', () => {
     b.xo = newXo();
     io.to(room).emit('xo', publicXo(b));
+  });
+
+  // ---------- أربعة بخط ----------
+  socket.on('c4:move', (col) => {
+    const g = b.c4;
+    if (!Number.isInteger(col) || col < 0 || col >= C4_W || g.winner) return;
+    let i = -1;
+    for (let r = C4_H - 1; r >= 0; r--) {
+      if (!g.cells[r * C4_W + col]) { i = r * C4_W + col; break; }
+    }
+    if (i < 0) return tell('c4', 'هالعمود تعبّى، اختار عمود ثاني');
+    const k = g.turn;
+    const seat = g.seats[k];
+    if (seat && seat.cid !== clientId) return tell('c4', 'مش دورك، استنى ' + seat.name);
+    if (!seat) {
+      const other = g.seats[k === 'R' ? 'Y' : 'R'];
+      // إذا إنت ماسك اللون الثاني وفي حدا معك، خلّيه هو يلعب
+      if (other && other.cid === clientId && othersHere()) return tell('c4', 'دور ' + C4_NAMES[k] + '، خلّي صاحبك يلعبه');
+      g.seats[k] = { cid: clientId, pid, name: user.name };
+    }
+    g.cells[i] = k;
+    g.last = i;
+    const line = c4Line(g.cells, i);
+    if (line) { g.winner = k; g.line = line; g.score[k]++; }
+    else if (g.cells.every(Boolean)) { g.winner = 'draw'; g.score.draw++; }
+    else g.turn = k === 'R' ? 'Y' : 'R';
+    io.to(room).emit('c4', publicC4(b));
+  });
+
+  // جولة جديدة: نفس اللاعبين ونفس النتيجة، واللي ما بلّش المرة الماضية بيبلّش هلأ
+  socket.on('c4:new', () => {
+    const g = b.c4;
+    for (const k of ['R', 'Y']) if (g.seats[k] && !isHere(g.seats[k].cid)) g.seats[k] = null;
+    if (g.seats.R && g.seats.Y && g.seats.R.cid === g.seats.Y.cid) g.seats.Y = null;
+    if (g.cells.some(Boolean)) g.first = g.first === 'R' ? 'Y' : 'R';
+    g.cells = Array(C4_W * C4_H).fill('');
+    g.turn = g.first;
+    g.winner = null;
+    g.line = null;
+    g.last = null;
+    io.to(room).emit('c4', publicC4(b));
+  });
+
+  // تصفير كامل: لاعبين جداد ونتيجة صفر
+  socket.on('c4:reset', () => {
+    b.c4 = newC4();
+    io.to(room).emit('c4', publicC4(b));
   });
 
   // ---------- ذاكرة الإيموجي ----------
@@ -775,6 +866,7 @@ io.on('connection', (socket) => {
     if (!name) return;
     user.name = name;
     for (const k of ['X', 'O']) if (b.xo.seats[k] && b.xo.seats[k].cid === clientId) b.xo.seats[k].name = name;
+    for (const k of ['R', 'Y']) if (b.c4.seats[k] && b.c4.seats[k].cid === clientId) b.c4.seats[k].name = name;
     const sc = b.mem.scores.get(clientId);
     if (sc) sc.name = name;
     if (b.mem.lock && b.mem.lock.cid === clientId) b.mem.lock.name = name;
@@ -784,6 +876,7 @@ io.on('connection', (socket) => {
     if (b.snake.ask && b.snake.ask.cid === clientId) b.snake.ask.name = name;
     io.to(room).emit('users', publicUsers(b));
     io.to(room).emit('xo', publicXo(b));
+    io.to(room).emit('c4', publicC4(b));
     io.to(room).emit('mem', publicMem(b));
     emitSnake(b, room);
   });
@@ -801,6 +894,11 @@ io.on('connection', (socket) => {
         if (b.xo.seats[k] && b.xo.seats[k].cid === clientId) { b.xo.seats[k] = null; changed = true; }
       }
       if (changed) io.to(room).emit('xo', publicXo(b));
+      let c4Changed = false;
+      for (const k of ['R', 'Y']) {
+        if (b.c4.seats[k] && b.c4.seats[k].cid === clientId) { b.c4.seats[k] = null; c4Changed = true; }
+      }
+      if (c4Changed) io.to(room).emit('c4', publicC4(b));
     }
 
     // طلب «مستعد؟» معلّق: إذا طلع صاحب الطلب، أو ما ضل حدا يرد، بنلغيه
