@@ -242,6 +242,33 @@ canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block
 .xo-grid.over .xo-cell:not(.win) span { opacity: .3; }
 @keyframes chalk-in { from { opacity: 0; transform: scale(.55); } }
 
+/* أربعة بخط */
+.c4-grid {
+  --c4gap: clamp(4px, 1.2vw, 9px);
+  display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: clamp(2px, .6vw, 5px);
+  padding: clamp(8px, 3%, 18px);
+}
+.c4-col {
+  appearance: none; border: 0; margin: 0; background: none; cursor: pointer; min-width: 0;
+  display: grid; gap: var(--c4gap); padding: clamp(2px, .6vw, 4px); border-radius: 999px;
+}
+.c4-col:hover:not([aria-disabled="true"]) { background: rgba(242, 239, 230, .08); }
+.c4-col:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.c4-col[aria-disabled="true"] { cursor: default; }
+.c4-hole {
+  position: relative; aspect-ratio: 1; border-radius: 50%;
+  background: rgba(0, 0, 0, .26); box-shadow: inset 0 3px 6px rgba(0, 0, 0, .35);
+}
+.c4-disc {
+  position: absolute; inset: 0; border-radius: 50%; background: var(--dc);
+  box-shadow: inset 0 -4px 0 rgba(0, 0, 0, .16), inset 0 3px 0 rgba(255, 255, 255, .4);
+  transition: opacity .25s ease;
+}
+.c4-disc.drop { animation: c4-drop var(--dur) cubic-bezier(.55, 0, 1, .45); }
+.c4-disc.win { box-shadow: inset 0 0 0 4px rgba(242, 239, 230, .92), inset 0 -4px 0 rgba(0, 0, 0, .16); }
+.c4-grid.over .c4-disc:not(.win) { opacity: .35; }
+@keyframes c4-drop { from { transform: translateY(var(--from)); } }
+
 .mem-board { padding: clamp(10px, 3.4%, 22px); }
 .mem-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: clamp(6px, 1.6vw, 12px); }
 .card {
@@ -381,6 +408,7 @@ canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block
   <nav class="tabs" role="tablist" aria-label="شو بدكم تعملوا">
     <button type="button" class="tab" role="tab" id="tab-draw" data-tab="draw" aria-controls="panel-draw" aria-selected="true">ارسم</button>
     <button type="button" class="tab" role="tab" id="tab-xo" data-tab="xo" aria-controls="panel-xo" aria-selected="false" tabindex="-1">إكس أو</button>
+    <button type="button" class="tab" role="tab" id="tab-c4" data-tab="c4" aria-controls="panel-c4" aria-selected="false" tabindex="-1">أربعة بخط</button>
     <button type="button" class="tab" role="tab" id="tab-mem" data-tab="mem" aria-controls="panel-mem" aria-selected="false" tabindex="-1">ذاكرة الإيموجي</button>
     <button type="button" class="tab" role="tab" id="tab-snake" data-tab="snake" aria-controls="panel-snake" aria-selected="false" tabindex="-1">الحية</button>
     <button type="button" class="tab" role="tab" id="tab-paint" data-tab="paint" aria-controls="panel-paint" aria-selected="false" tabindex="-1">لوّن</button>
@@ -437,6 +465,26 @@ canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block
         <div class="group actions">
           <button type="button" class="act" id="xo-new">جولة جديدة</button>
           <button type="button" class="act" id="xo-reset">صفّر النتيجة</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- أربعة بخط -->
+    <section class="game" id="panel-c4" role="tabpanel" aria-labelledby="tab-c4" hidden>
+      <div class="game-head">
+        <p class="game-status" id="c4-status" aria-live="polite"></p>
+        <ul class="people" id="c4-seats" aria-label="اللاعبين"></ul>
+      </div>
+      <div class="frame">
+        <div class="slate">
+          <div class="c4-grid" id="c4-grid" role="group" aria-label="لوحة أربعة بخط: اختار عمود والقرص بينزل فيه"></div>
+        </div>
+      </div>
+      <div class="tray">
+        <ul class="chips" id="c4-score" aria-label="النتيجة"></ul>
+        <div class="group actions">
+          <button type="button" class="act" id="c4-new">جولة جديدة</button>
+          <button type="button" class="act" id="c4-reset">صفّر النتيجة</button>
         </div>
       </div>
     </section>
@@ -609,7 +657,7 @@ canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block
   let scale = 1, fullRedraw = true, frameDirty = true;
   let lastCursor = null, cursorSent = null;
   let tab = 'draw';
-  let xo = null, mem = null, snake = null;
+  let xo = null, c4 = null, mem = null, snake = null;
 
   // ---------- الأدوات ----------
   CHALKS.forEach((ch) => {
@@ -746,6 +794,7 @@ canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block
     renderPeople();
     fullRedraw = true; frameDirty = true;
     xo = d.xo || null; renderXo();
+    c4 = d.c4 || null; c4Fresh = true; renderC4();
     mem = d.mem || null; renderMem();
     snake = d.snake || null; renderSnake();
     paint = d.paint || null; shownPic = ''; renderPaint();
@@ -771,6 +820,7 @@ canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block
   socket.on('cleared', () => { committed = []; committedIds.clear(); fullRedraw = true; });
   socket.on('cursor', (d) => renderCursor(d));
   socket.on('xo', (s) => { xo = s; renderXo(); ping('xo'); });
+  socket.on('c4', (s) => { c4 = s; renderC4(); ping('c4'); });
   socket.on('mem', (s) => { mem = s; renderMem(); ping('mem'); });
   socket.on('snake', (s) => { snake = s; renderSnake(); ping('snake'); });
   socket.on('game:msg', (d) => { if (d && d.text) flash(d.game, d.text); });
@@ -787,7 +837,7 @@ canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block
   }
 
   // ---------- التبويبات ----------
-  const TABS = ['draw', 'xo', 'mem', 'snake', 'paint'];
+  const TABS = ['draw', 'xo', 'c4', 'mem', 'snake', 'paint'];
   function setTab(t) {
     if (!TABS.includes(t) || t === tab) return;
     if (t !== 'draw') {
@@ -828,7 +878,7 @@ canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block
     s.textContent = text; s.classList.add('warn');
     flashTimers[game] = setTimeout(() => {
       s.classList.remove('warn');
-      if (game === 'xo') renderXo(); else if (game === 'snake') renderSnake(); else if (game === 'paint') renderPaint(); else renderMem();
+      if (game === 'xo') renderXo(); else if (game === 'c4') renderC4(); else if (game === 'snake') renderSnake(); else if (game === 'paint') renderPaint(); else renderMem();
     }, 2200);
   }
   const isMe = (x) => !!(x && me && x.pid === me.pid);
@@ -890,6 +940,89 @@ canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block
     );
     const st = $('xo-status');
     if (!st.classList.contains('warn')) st.textContent = xoStatus();
+  }
+
+  // ---------- أربعة بخط ----------
+  const C4W = 7, C4H = 6;
+  const C4_COLOR = { R: '#EF7B6B', Y: '#F5D76E' };
+  const C4_NAME = { R: 'الأحمر', Y: 'الأصفر' };
+  const c4Cols = [], c4Holes = [];
+  let c4Fresh = true; // أول رسمة بعد الاتصال: بدون حركة نزول
+  for (let c = 0; c < C4W; c++) {
+    const col = el('button', 'c4-col');
+    col.type = 'button';
+    for (let r = 0; r < C4H; r++) {
+      const h = el('span', 'c4-hole');
+      col.appendChild(h); c4Holes[r * C4W + c] = h;
+    }
+    col.addEventListener('click', () => c4Move(c));
+    $('c4-grid').appendChild(col); c4Cols.push(col);
+  }
+  const c4Full = (c) => !!(c4 && c4.cells[c]);
+  function c4Move(c) {
+    if (!c4 || c4.winner) return;
+    if (c4Full(c)) { flash('c4', 'هالعمود تعبّى، اختار عمود ثاني'); return; }
+    const seat = c4.seats[c4.turn];
+    if (seat && !isMe(seat)) { flash('c4', 'مش دورك، استنى ' + seat.name); return; }
+    socket.emit('c4:move', c);
+  }
+  $('c4-new').addEventListener('click', () => socket.emit('c4:new'));
+  $('c4-reset').addEventListener('click', () => socket.emit('c4:reset'));
+  function c4Status() {
+    if (c4.winner === 'draw') return 'تعادل، اللوحة تعبّت! اضغطوا «جولة جديدة» وكمّلوا';
+    if (c4.winner) {
+      const s = c4.seats[c4.winner];
+      return isMe(s) ? 'فزت! 🎉' : 'فاز ' + (s ? s.name : C4_NAME[c4.winner]) + ' 🎉';
+    }
+    const k = c4.turn, s = c4.seats[k];
+    if (!s) return 'دور ' + C4_NAME[k] + '، اللي بيلعب أول بياخده';
+    return isMe(s) ? 'دورك، إنت ' + C4_NAME[k] : 'دور ' + s.name + ' (' + C4_NAME[k] + ')';
+  }
+  function renderC4() {
+    if (!c4) return;
+    $('c4-grid').classList.toggle('over', !!c4.winner);
+    c4.cells.forEach((v, i) => {
+      const h = c4Holes[i];
+      if ((h.dataset.v || '') !== v) {
+        h.dataset.v = v;
+        h.replaceChildren();
+        if (v) {
+          const d = el('span', 'c4-disc');
+          d.style.setProperty('--dc', C4_COLOR[v]);
+          if (!c4Fresh && i === c4.last) {
+            const row = Math.floor(i / C4W);
+            d.style.setProperty('--from', 'calc(-' + (row + 1) + ' * (100% + var(--c4gap)))');
+            d.style.setProperty('--dur', (0.16 + row * 0.05).toFixed(2) + 's');
+            d.classList.add('drop');
+          }
+          h.appendChild(d);
+        }
+      }
+      if (h.firstChild) h.firstChild.classList.toggle('win', !!(c4.line && c4.line.includes(i)));
+    });
+    c4Fresh = false;
+    c4Cols.forEach((col, c) => {
+      const full = c4Full(c);
+      col.setAttribute('aria-label', 'العمود ' + (c + 1) + (full ? '، تعبّى' : ''));
+      col.setAttribute('aria-disabled', String(full || !!c4.winner));
+    });
+    const seats = document.createDocumentFragment();
+    for (const k of ['R', 'Y']) {
+      const s = c4.seats[k];
+      const li = el('li', 'person seat');
+      li.style.setProperty('--pc', C4_COLOR[k]);
+      if (!c4.winner && c4.turn === k) li.dataset.turn = '';
+      li.append(el('span', 'av'), el('span', '', s ? (isMe(s) ? 'إنت' : s.name) : 'لسا فاضي'));
+      seats.appendChild(li);
+    }
+    $('c4-seats').replaceChildren(seats);
+    $('c4-score').replaceChildren(
+      el('li', 'chip', 'الأحمر: ' + c4.score.R),
+      el('li', 'chip', 'الأصفر: ' + c4.score.Y),
+      el('li', 'chip', 'تعادل: ' + c4.score.draw)
+    );
+    const st = $('c4-status');
+    if (!st.classList.contains('warn')) st.textContent = c4Status();
   }
 
   // ---------- ذاكرة الإيموجي ----------
