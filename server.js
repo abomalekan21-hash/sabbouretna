@@ -60,6 +60,10 @@ const PAINT_PICS = new Set(['house', 'flower', 'tree', 'car', 'fish', 'butterfly
 const PAINT_REGION = /^[a-z0-9]{1,8}$/;
 const PAINT_MAX = 300; // أقصى عدد أجزاء ملوّنة بالرسمة الوحدة
 
+// لعبة الدومينو (لاعبين): 28 حجر، كل واحد بياخد كم حجر والباقي بالكومة
+const DOM_HAND = 7;      // كم حجر بياخد كل لاعب أول الجولة
+const DOM_TARGET = 101;  // أول واحد بيوصل لهالنقاط بيفوز باللعبة كلها
+
 // ---------- التحقق من البيانات القادمة من المتصفح ----------
 function cleanPts(p, max) {
   if (!Array.isArray(p) || p.length % 2 !== 0 || p.length > max) return null;
@@ -416,6 +420,135 @@ function snakeTick(b, room, g) {
   emitSnake(b, room);
 }
 
+// ---------- الدومينو ----------
+function newDom() {
+  return {
+    phase: 'idle',        // idle | play | round: خلصت جولة | match: حدا وصل للهدف
+    seats: [],            // لاعبين اثنين: { cid, pid, name, hand: [[a, b]...], score }
+    pile: [],             // الكومة (ما بتنبعت لحدا)
+    first: null,          // أول حجر نزل على الطاولة [يسار، يمين]
+    left: [], right: [],  // الحجار على كل طرف بترتيب نزولها، كل واحد [الرقم اللاصق، الرقم البرّاني]
+    turn: 0,              // دور مين (0 أو 1)
+    starter: 0,           // مين بيبلّش الجولة
+    why: '',              // ليش هو بيبلّش: double أكبر دبل | tile أكبر حجر | won فاز بالجولة الماضية | swap بالدور
+    last: null,           // آخر حجر نزل { side: 'F' | 'L' | 'R', pid }
+    result: null,         // نتيجة الجولة { winner, pts, blocked, sums }
+    round: 0,
+    ask: null,
+    askTimer: null
+  };
+}
+function domSet() {
+  const t = [];
+  for (let a = 0; a <= 6; a++) for (let c = a; c <= 6; c++) t.push([a, c]);
+  return t;
+}
+const domPips = (hand) => hand.reduce((n, [a, c]) => n + a + c, 0);
+function domEnds(g) {
+  if (!g.first) return null;
+  return {
+    L: g.left.length ? g.left[g.left.length - 1][1] : g.first[0],
+    R: g.right.length ? g.right[g.right.length - 1][1] : g.first[1]
+  };
+}
+// وين بيركب الحجر: 'F' إذا الطاولة فاضية، أو 'L' و/أو 'R'
+function domFits(g, [a, c]) {
+  const e = domEnds(g);
+  if (!e) return ['F'];
+  const s = [];
+  if (a === e.L || c === e.L) s.push('L');
+  if (a === e.R || c === e.R) s.push('R');
+  return s;
+}
+const domCanPlay = (g, hand) => hand.some((t) => domFits(g, t).length > 0);
+// الطاولة سكّرت: الكومة خلصت وما حدا معه إشي بيركب
+const domBlocked = (g) => !g.pile.length && g.seats.every((s) => !domCanPlay(g, s.hand));
+function cidHere(b, cid) {
+  for (const u of b.users.values()) if (u.cid === cid) return true;
+  return false;
+}
+function domDeal(g) {
+  const set = shuffle(domSet());
+  for (const s of g.seats) s.hand = set.splice(0, DOM_HAND).sort((x, y) => x[0] - y[0] || x[1] - y[1]);
+  g.pile = set;
+  g.first = null;
+  g.left = [];
+  g.right = [];
+  g.last = null;
+  g.result = null;
+  g.round++;
+  g.phase = 'play';
+  if (g.round === 1) {
+    // أول جولة: بيبلّش اللي معه أكبر دبل، وإذا ما حدا معه دبل، اللي معه أكبر حجر
+    const rank = ([a, c]) => (a === c ? 100 + a : a + c + Math.max(a, c) / 10);
+    const best = g.seats.map((s) => Math.max(...s.hand.map(rank)));
+    g.starter = best[0] >= best[1] ? 0 : 1;
+    g.why = Math.max(...best) >= 100 ? 'double' : 'tile';
+  }
+  g.turn = g.starter;
+}
+// بنحط الحجر على الطرف، ومقلوب إذا لازم عشان الرقم اللاصق يكون زي الطرف
+function domPut(g, [x, y], side) {
+  if (side === 'F') { g.first = [x, y]; return; }
+  const arm = side === 'L' ? g.left : g.right;
+  const end = arm.length ? arm[arm.length - 1][1] : (side === 'L' ? g.first[0] : g.first[1]);
+  arm.push(x === end ? [x, y] : [y, x]);
+}
+// winner: رقم اللي خلّص حجاره، أو -1 إذا الطاولة سكّرت
+function domEndRound(g, winner) {
+  const sums = g.seats.map((s) => domPips(s.hand));
+  const blocked = winner < 0;
+  // إذا سكّرت: اللي حجاره أقل بيفوز، وإذا متساويين ما حدا بياخد إشي
+  if (blocked) winner = sums[0] < sums[1] ? 0 : sums[1] < sums[0] ? 1 : -1;
+  const pts = winner >= 0 ? sums[1 - winner] : 0;
+  if (winner >= 0) g.seats[winner].score += pts;
+  g.result = { winner, pts, blocked, sums };
+  if (winner >= 0) { g.starter = winner; g.why = 'won'; }
+  else { g.starter = 1 - g.starter; g.why = 'swap'; }
+  g.phase = winner >= 0 && g.seats[winner].score >= DOM_TARGET ? 'match' : 'round';
+}
+function domBegin(b, cids) {
+  clearTimeout(b.dom.askTimer);
+  const g = newDom();
+  g.seats = cids.map((cid) => {
+    const u = [...b.users.values()].find((x) => x.cid === cid);
+    return { cid, pid: b.pids.get(cid), name: u ? u.name : 'لاعب', hand: [], score: 0 };
+  });
+  b.dom = g;
+  domDeal(g);
+  emitDom(b);
+}
+function publicDom(b, cid) {
+  const g = b.dom;
+  const open = g.phase === 'round' || g.phase === 'match';
+  const mine = g.seats.find((s) => s.cid === cid);
+  return {
+    phase: g.phase, target: DOM_TARGET, round: g.round,
+    seats: g.seats.map((s) => ({
+      pid: s.pid, name: s.name, count: s.hand.length, score: s.score, here: cidHere(b, s.cid),
+      hand: open ? s.hand : null // حجار الثاني بتنكشف بس لما تخلص الجولة
+    })),
+    hand: mine ? mine.hand : null, // حجارك إنت بس
+    pile: g.pile.length,
+    first: g.first, left: g.left, right: g.right,
+    turn: g.turn, why: g.why, last: g.last, result: g.result,
+    ask: g.ask ? { pid: g.ask.pid, name: g.ask.name, no: [...g.ask.no].map((c) => b.pids.get(c)) } : null
+  };
+}
+// كل واحد بتوصله نسخة فيها حجاره هو بس، فما حدا بيقدر يغشّ من المتصفح
+function emitDom(b) {
+  for (const u of b.users.values()) io.to(u.id).emit('dom', publicDom(b, u.cid));
+}
+function domCancelAsk(b, note) {
+  const g = b.dom;
+  if (!g.ask) return;
+  const ask = g.ask;
+  clearTimeout(g.askTimer);
+  g.ask = null;
+  if (note) tellCid(b, ask.cid, 'dom', note);
+  emitDom(b);
+}
+
 // ---------- اللوحات ----------
 const boards = new Map(); // room -> board
 
@@ -427,6 +560,7 @@ function newBoard(strokes) {
     c4: newC4(),
     mem: newMem(),
     snake: newSnake(),
+    dom: newDom(),
     paint: { pic: 'house', fills: new Map() } // pic -> Map(جزء -> لون)
   };
 }
@@ -526,9 +660,12 @@ io.on('connection', (socket) => {
     c4: publicC4(b),
     mem: publicMem(b),
     snake: publicSnake(b),
+    dom: publicDom(b, clientId),
     paint: publicPaint(b)
   });
   socket.to(room).emit('users', publicUsers(b));
+  // لاعب دومينو رجع (مثلاً عمل تحديث للصفحة): بنخبّر صاحبه إنه رجع
+  if (b.dom.seats.some((s) => s.cid === clientId)) emitDom(b);
 
   const mineLive = new Set();
 
@@ -833,6 +970,108 @@ io.on('connection', (socket) => {
     s.queue.push(d);
   });
 
+  // ---------- الدومينو ----------
+  const domSeat = () => b.dom.seats.findIndex((s) => s.cid === clientId);
+  const domToOthers = (text) => {
+    for (const u of b.users.values()) if (u.cid !== clientId) io.to(u.id).emit('game:msg', { game: 'dom', text });
+  };
+  // إذا دورك بيرجّع رقم مقعدك، وإلا -1 مع رسالة
+  function domMyTurn() {
+    const g = b.dom;
+    if (g.phase !== 'play') return -1;
+    const i = domSeat();
+    if (i < 0) { tell('dom', 'إنت بتتفرج هاللعبة'); return -1; }
+    if (g.turn !== i) { tell('dom', 'مش دورك، استنى ' + g.seats[g.turn].name); return -1; }
+    return i;
+  }
+
+  socket.on('dom:play', (d) => {
+    const g = b.dom;
+    if (!d || !Array.isArray(d.t) || d.t.length !== 2) return;
+    const i = domMyTurn();
+    if (i < 0) return;
+    const [x, y] = d.t;
+    const hand = g.seats[i].hand;
+    const k = hand.findIndex(([a, c]) => (a === x && c === y) || (a === y && c === x));
+    if (k < 0) return;
+    if (!domFits(g, hand[k]).includes(d.side)) return tell('dom', 'هالحجر ما بيركب هون');
+    const [t] = hand.splice(k, 1);
+    domPut(g, t, d.side);
+    g.last = { side: d.side, pid };
+    if (!hand.length) domEndRound(g, i);
+    else if (domBlocked(g)) domEndRound(g, -1);
+    else g.turn = 1 - i;
+    emitDom(b);
+  });
+
+  // السحب من الكومة: بس إذا ما معك إشي بيركب
+  socket.on('dom:draw', () => {
+    const g = b.dom;
+    const i = domMyTurn();
+    if (i < 0) return;
+    const hand = g.seats[i].hand;
+    if (domCanPlay(g, hand)) return tell('dom', 'معك حجر بيركب، نزّله');
+    if (!g.pile.length) return tell('dom', 'الكومة خلصت، مرّر الدور');
+    hand.push(g.pile.pop());
+    domToOthers(user.name + ' سحب حجر من الكومة');
+    if (domBlocked(g)) domEndRound(g, -1);
+    emitDom(b);
+  });
+
+  // تمرير الدور: بس إذا ما معك إشي بيركب والكومة خلصت
+  socket.on('dom:pass', () => {
+    const g = b.dom;
+    const i = domMyTurn();
+    if (i < 0) return;
+    if (domCanPlay(g, g.seats[i].hand)) return tell('dom', 'معك حجر بيركب، نزّله');
+    if (g.pile.length) return tell('dom', 'اسحب من الكومة أول');
+    g.turn = 1 - i;
+    domToOthers(user.name + ' ما معه إشي بيركب، مرّر الدور');
+    emitDom(b);
+  });
+
+  // «ابدأ اللعبة»: الدومينو لاثنين، فلازم حدا يوافق على «مستعد؟»
+  socket.on('dom:start', () => {
+    const g = b.dom;
+    if (g.ask) {
+      // إذا في طلب من غيرك وضغطت «ابدأ»، كأنك قلت «نعم»
+      if (g.ask.cid !== clientId) domBegin(b, [g.ask.cid, clientId]);
+      return;
+    }
+    if (!othersHere()) return tell('dom', 'الدومينو بدها اثنين، ابعت الرابط لصاحبك');
+    if ((g.phase === 'play' || g.phase === 'round') && domSeat() < 0 && g.seats.some((s) => cidHere(b, s.cid))) {
+      return tell('dom', 'في لعبة شغالة، استنوها تخلص');
+    }
+    g.ask = { cid: clientId, pid, name: user.name, no: new Set() };
+    g.askTimer = setTimeout(() => {
+      if (b.dom === g && g.ask) domCancelAsk(b, 'ما حدا ردّ، جرّب كمان مرة');
+    }, MEM_ASK_MS);
+    emitDom(b);
+  });
+
+  socket.on('dom:answer', (yes) => {
+    const g = b.dom;
+    if (!g.ask || g.ask.cid === clientId) return;
+    if (yes === true) { domBegin(b, [g.ask.cid, clientId]); return; }
+    g.ask.no.add(clientId);
+    tellCid(b, g.ask.cid, 'dom', user.name + ' مش جاهز هلأ');
+    const others = otherCids(b, g.ask.cid);
+    if ([...others].every((c) => g.ask.no.has(c))) domCancelAsk(b);
+    else emitDom(b);
+  });
+
+  socket.on('dom:cancel', () => {
+    if (b.dom.ask && b.dom.ask.cid === clientId) domCancelAsk(b);
+  });
+
+  // الجولة الجاية: نفس اللاعبين ونفس النقاط
+  socket.on('dom:next', () => {
+    const g = b.dom;
+    if (g.phase !== 'round' || domSeat() < 0) return;
+    domDeal(g);
+    emitDom(b);
+  });
+
   // ---------- التلوين ----------
   socket.on('paint:fill', (d) => {
     if (!d || !PAINT_PICS.has(d.pic) || typeof d.r !== 'string' || !PAINT_REGION.test(d.r)) return;
@@ -874,11 +1113,14 @@ io.on('connection', (socket) => {
     const sp = b.snake.players.get(clientId);
     if (sp) sp.name = name;
     if (b.snake.ask && b.snake.ask.cid === clientId) b.snake.ask.name = name;
+    for (const s of b.dom.seats) if (s.cid === clientId) s.name = name;
+    if (b.dom.ask && b.dom.ask.cid === clientId) b.dom.ask.name = name;
     io.to(room).emit('users', publicUsers(b));
     io.to(room).emit('xo', publicXo(b));
     io.to(room).emit('c4', publicC4(b));
     io.to(room).emit('mem', publicMem(b));
     emitSnake(b, room);
+    emitDom(b);
   });
 
   socket.on('disconnect', () => {
@@ -928,9 +1170,20 @@ io.on('connection', (socket) => {
       else if ([...others].every((c) => sAsk.no.has(c))) snakeCancelAsk(b, room);
     }
 
+    // الدومينو: اللي طلع بيضل مكانه وحجاره محفوظين لما يرجع، بس بنخبّر صاحبه
+    if (!isHere(clientId) && b.dom.seats.some((s) => s.cid === clientId)) emitDom(b);
+    const dAsk = b.dom.ask;
+    if (dAsk) {
+      const others = otherCids(b, dAsk.cid);
+      if (dAsk.cid === clientId && !isHere(clientId)) domCancelAsk(b);
+      else if (!others.size) domCancelAsk(b, 'صاحبك طلع، استنى حدا يفتح الرابط');
+      else if ([...others].every((c) => dAsk.no.has(c))) domCancelAsk(b);
+    }
+
     if (!b.users.size && !b.strokes.length && room !== 'main') {
       clearMemTimers(b.mem);
       stopSnake(b.snake);
+      clearTimeout(b.dom.askTimer);
       boards.delete(room);
     }
   });
