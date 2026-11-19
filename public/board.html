@@ -154,7 +154,7 @@ canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block
   border-radius: 9px; cursor: pointer; color: var(--wood-text);
 }
 .tool:focus-visible, .act:focus-visible, .confirm button:focus-visible, .pk:focus-visible,
-.xo-cell:focus-visible, .card:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.xo-cell:focus-visible, .card:focus-visible, .dt.ghost:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 .chalk i {
   display: block; width: 32px; height: 11px; border-radius: 6px 3px 3px 6px; background: var(--c);
   box-shadow: inset 0 -3px 0 rgba(0, 0, 0, .13), inset 0 2px 0 rgba(255, 255, 255, .45), 0 2px 0 rgba(0, 0, 0, .28);
@@ -385,6 +385,59 @@ canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block
   .tab { padding-inline: 12px; }
 }
 
+/* ---------- الدومينو ---------- */
+.dom-table { position: relative; display: flex; flex-direction: column; gap: 8px; padding: clamp(8px, 2.6%, 16px); }
+.dom-bar {
+  display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 6px 14px; min-height: 30px;
+  color: rgba(242, 239, 230, .72); font-size: 14px; font-weight: 600; line-height: 1.3;
+}
+.dom-hand-o { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px; }
+.dom-backs { display: flex; flex-wrap: wrap; gap: 3px; align-items: center; }
+/* ظهر الحجر: غامق مع نقطة بالنص */
+.dom-back {
+  position: relative; width: 13px; height: 24px; flex: none; border-radius: 3px;
+  background: #1D3029; border: 1px solid rgba(242, 239, 230, .32); box-shadow: 0 2px 0 rgba(0, 0, 0, .3);
+}
+.dom-back::after {
+  content: ""; position: absolute; left: 50%; top: 50%; width: 3px; height: 3px; margin: -1.5px 0 0 -1.5px;
+  border-radius: 50%; background: rgba(242, 239, 230, .45);
+}
+.dom-mini { display: block; width: 18px; height: auto; flex: none; }
+.dom-pile { display: inline-flex; align-items: center; gap: 7px; }
+.dom-pile .dom-back { width: 11px; height: 20px; }
+.dom-felt { position: relative; }
+.dom-svg { display: block; width: 100%; height: auto; }
+.dom-empty {
+  position: absolute; inset: 0; display: grid; place-items: center; margin: 0; padding: 1em; pointer-events: none;
+  color: rgba(242, 239, 230, .42); font-size: clamp(16px, 2.4vw, 22px); font-weight: 600; text-align: center;
+}
+.dt-sh { fill: rgba(0, 0, 0, .32); }
+.dt-body { fill: #F6EFDF; stroke: rgba(0, 0, 0, .28); stroke-width: .03; }
+.dt-mid { stroke: rgba(36, 48, 44, .42); stroke-width: .045; stroke-linecap: round; }
+.dt-pip { fill: #24302C; }
+.dt.new { animation: dt-in .32s ease-out; transform-box: fill-box; transform-origin: center; }
+@keyframes dt-in { from { opacity: 0; transform: scale(.72); } }
+/* مكان الحجر لما يكون إله مكانين: شفاف ومنقّط، اضغط عليه وبينحط */
+.dt.ghost { cursor: pointer; opacity: .62; animation: dt-pulse 1.4s ease-in-out infinite; }
+.dt.ghost .dt-sh { fill: none; }
+.dt.ghost .dt-body { stroke: #F5D76E; stroke-width: .09; stroke-dasharray: .2 .14; }
+.dt.ghost:hover { opacity: .92; animation: none; }
+@keyframes dt-pulse { 50% { opacity: .38; } }
+/* حجارك على الصينية الخشب */
+.dom-rack { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 6px; min-height: 64px; padding-top: 10px; }
+.dom-tile {
+  appearance: none; border: 0; margin: 0; padding: 0; background: none; cursor: pointer; flex: none;
+  width: 32px; transition: transform .15s ease, opacity .2s ease;
+}
+.dom-tile svg { display: block; width: 100%; height: auto; }
+.dom-tile[data-s="fit"] { transform: translateY(-5px); }
+.dom-tile[data-s="no"] { opacity: .42; cursor: default; }
+.dom-tile[aria-pressed="true"] { transform: translateY(-12px); }
+.dom-tile[aria-pressed="true"] .dt-body { stroke: #F5D76E; stroke-width: .09; }
+.dom-tile:focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; border-radius: 4px; }
+#dom-seats .av { width: auto; min-width: 24px; padding-inline: 6px; border-radius: 999px; }
+@media (max-width: 480px) { .dom-tile { width: 28px; } .dom-rack { gap: 5px; } }
+
 [hidden] { display: none !important; }
 @media (max-width: 560px) { .tray { justify-content: center; } .sep { display: none; } }
 @media (max-width: 480px) { .mem-grid { grid-template-columns: repeat(4, 1fr); } }
@@ -409,6 +462,7 @@ canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block
     <button type="button" class="tab" role="tab" id="tab-draw" data-tab="draw" aria-controls="panel-draw" aria-selected="true">ارسم</button>
     <button type="button" class="tab" role="tab" id="tab-xo" data-tab="xo" aria-controls="panel-xo" aria-selected="false" tabindex="-1">إكس أو</button>
     <button type="button" class="tab" role="tab" id="tab-c4" data-tab="c4" aria-controls="panel-c4" aria-selected="false" tabindex="-1">أربعة بخط</button>
+    <button type="button" class="tab" role="tab" id="tab-dom" data-tab="dom" aria-controls="panel-dom" aria-selected="false" tabindex="-1">دومينو</button>
     <button type="button" class="tab" role="tab" id="tab-mem" data-tab="mem" aria-controls="panel-mem" aria-selected="false" tabindex="-1">ذاكرة الإيموجي</button>
     <button type="button" class="tab" role="tab" id="tab-snake" data-tab="snake" aria-controls="panel-snake" aria-selected="false" tabindex="-1">الحية</button>
     <button type="button" class="tab" role="tab" id="tab-paint" data-tab="paint" aria-controls="panel-paint" aria-selected="false" tabindex="-1">لوّن</button>
@@ -487,6 +541,48 @@ canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block
           <button type="button" class="act" id="c4-reset">صفّر النتيجة</button>
         </div>
       </div>
+    </section>
+
+    <!-- الدومينو -->
+    <section class="game wide" id="panel-dom" role="tabpanel" aria-labelledby="tab-dom" hidden>
+      <div class="game-head">
+        <p class="game-status" id="dom-status" aria-live="polite"></p>
+        <ul class="people" id="dom-seats" aria-label="اللاعبين ونقاطهم"></ul>
+      </div>
+      <div class="frame">
+        <div class="slate dom-table">
+          <div class="dom-bar">
+            <div id="dom-top"></div>
+            <span class="dom-pile" id="dom-pile" hidden></span>
+          </div>
+          <div class="dom-felt">
+            <svg class="dom-svg" id="dom-svg" role="img" aria-label="طاولة الدومينو"></svg>
+            <p class="dom-empty" id="dom-empty"></p>
+          </div>
+          <div class="dom-bar" id="dom-bottom" hidden></div>
+          <div class="ask" id="dom-ask" role="dialog" aria-labelledby="dom-ask-text" hidden>
+            <div class="ask-box">
+              <p id="dom-ask-text"></p>
+              <div class="row">
+                <button type="button" class="yes" id="dom-yes">نعم</button>
+                <button type="button" class="no" id="dom-no">لا</button>
+                <button type="button" class="no" id="dom-cancel">إلغاء الطلب</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="tray">
+        <div class="dom-rack" id="dom-rack" role="group" aria-label="حجارك"></div>
+        <div class="group actions">
+          <button type="button" class="act" id="dom-side-R" hidden></button>
+          <button type="button" class="act" id="dom-side-L" hidden></button>
+          <button type="button" class="act" id="dom-draw" hidden>اسحب من الكومة</button>
+          <button type="button" class="act" id="dom-pass" hidden>مرّر الدور</button>
+          <button type="button" class="act" id="dom-start">ابدأ اللعبة</button>
+        </div>
+      </div>
+      <p class="game-note" id="dom-note"></p>
     </section>
 
     <!-- ذاكرة الإيموجي -->
@@ -657,7 +753,7 @@ canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block
   let scale = 1, fullRedraw = true, frameDirty = true;
   let lastCursor = null, cursorSent = null;
   let tab = 'draw';
-  let xo = null, c4 = null, mem = null, snake = null;
+  let xo = null, c4 = null, mem = null, snake = null, dom = null;
 
   // ---------- الأدوات ----------
   CHALKS.forEach((ch) => {
@@ -797,6 +893,7 @@ canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block
     c4 = d.c4 || null; c4Fresh = true; renderC4();
     mem = d.mem || null; renderMem();
     snake = d.snake || null; renderSnake();
+    dom = d.dom || null; domFresh = true; renderDom();
     paint = d.paint || null; shownPic = ''; renderPaint();
   });
   socket.on('users', (list) => { users = Array.isArray(list) ? list : []; renderPeople(); pruneCursors(); });
@@ -823,6 +920,7 @@ canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block
   socket.on('c4', (s) => { c4 = s; renderC4(); ping('c4'); });
   socket.on('mem', (s) => { mem = s; renderMem(); ping('mem'); });
   socket.on('snake', (s) => { snake = s; renderSnake(); ping('snake'); });
+  socket.on('dom', (s) => { dom = s; renderDom(); ping('dom'); });
   socket.on('game:msg', (d) => { if (d && d.text) flash(d.game, d.text); });
 
   function setConn() {
@@ -837,7 +935,7 @@ canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block
   }
 
   // ---------- التبويبات ----------
-  const TABS = ['draw', 'xo', 'c4', 'mem', 'snake', 'paint'];
+  const TABS = ['draw', 'xo', 'c4', 'dom', 'mem', 'snake', 'paint'];
   function setTab(t) {
     if (!TABS.includes(t) || t === tab) return;
     if (t !== 'draw') {
@@ -854,6 +952,7 @@ canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block
     }
     if (mem) renderMem();
     if (snake) renderSnake();
+    if (dom) renderDom();
   }
   function ping(t) { if (tab !== t) $('tab-' + t).dataset.new = ''; }
   for (const k of TABS) {
@@ -878,7 +977,7 @@ canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block
     s.textContent = text; s.classList.add('warn');
     flashTimers[game] = setTimeout(() => {
       s.classList.remove('warn');
-      if (game === 'xo') renderXo(); else if (game === 'c4') renderC4(); else if (game === 'snake') renderSnake(); else if (game === 'paint') renderPaint(); else renderMem();
+      if (game === 'xo') renderXo(); else if (game === 'c4') renderC4(); else if (game === 'snake') renderSnake(); else if (game === 'paint') renderPaint(); else if (game === 'dom') renderDom(); else renderMem();
     }, 2200);
   }
   const isMe = (x) => !!(x && me && x.pid === me.pid);
@@ -1023,6 +1122,341 @@ canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block
     );
     const st = $('c4-status');
     if (!st.classList.contains('warn')) st.textContent = c4Status();
+  }
+
+  // ---------- الدومينو ----------
+  const SVGNS = 'http://www.w3.org/2000/svg';
+  const sv = (tag, attrs) => {
+    const e = document.createElementNS(SVGNS, tag);
+    for (const k in attrs) e.setAttribute(k, attrs[k]);
+    return e;
+  };
+  // مكان النقط بنص المربع لما الحجر واقف، ولما يكون نايم بنلفّها
+  const PIPS = [[], [[0, 0]], [[-1, -1], [1, 1]], [[-1, -1], [0, 0], [1, 1]],
+    [[-1, -1], [1, -1], [-1, 1], [1, 1]], [[-1, -1], [1, -1], [0, 0], [-1, 1], [1, 1]],
+    [[-1, -1], [-1, 0], [-1, 1], [1, -1], [1, 0], [1, 1]]];
+  const DOM_SEAT_COLOR = ['#F5D76E', '#93CFEE'];
+  const domNarrow = window.matchMedia('(max-width: 480px)');
+  let domL = 7;          // نص عرض الطاولة بالمربعات (الحجر طوله مربعين)
+  let domSel = null;     // الحجر اللي اخترته ولسا بدك تختار وين تحطه: 'a-b'
+  let domLastKey = '', domFresh = true;
+
+  const domMine = () => (dom && me ? dom.seats.findIndex((s) => isMe(s)) : -1);
+  const domKey = (t) => t[0] + '-' + t[1];
+  function domEnds() {
+    if (!dom || !dom.first) return null;
+    return {
+      L: dom.left.length ? dom.left[dom.left.length - 1][1] : dom.first[0],
+      R: dom.right.length ? dom.right[dom.right.length - 1][1] : dom.first[1]
+    };
+  }
+  function domFits(t) {
+    const e = domEnds();
+    if (!e) return ['F'];
+    const s = [];
+    if (t[0] === e.L || t[1] === e.L) s.push('L');
+    if (t[0] === e.R || t[1] === e.R) s.push('R');
+    return s;
+  }
+  const domMyTurn = () => !!(dom && dom.phase === 'play' && domMine() >= 0 && dom.turn === domMine());
+  const domCanPlay = () => !!(dom && dom.hand && dom.hand.some((t) => domFits(t).length));
+  function domSelTile() {
+    if (!domSel) return null;
+    const t = domMyTurn() && dom.hand.find((x) => domKey(x) === domSel);
+    if (!t || domFits(t).length < 2) { domSel = null; return null; }
+    return t;
+  }
+  const domCount = (n) => (n === 0 ? 'ولا حجر' : n === 1 ? 'حجر واحد' : n === 2 ? 'حجرين' : n <= 10 ? n + ' حجار' : n + ' حجر');
+
+  // رسمة حجر: ظل + جسم + خط بالنص + النقط. t = { x, y, w, h, o: 'h' نايم | 'v' واقف, sq: [[x, y, رقم], [x, y, رقم]] }
+  function domTileSvg(t) {
+    const g = sv('g', { class: 'dt' });
+    g.appendChild(sv('rect', { class: 'dt-sh', x: t.x + .05, y: t.y + .08, width: t.w, height: t.h, rx: .16 }));
+    g.appendChild(sv('rect', { class: 'dt-body', x: t.x + .03, y: t.y + .03, width: t.w - .06, height: t.h - .06, rx: .15 }));
+    g.appendChild(t.o === 'h'
+      ? sv('line', { class: 'dt-mid', x1: t.x + t.w / 2, y1: t.y + .17, x2: t.x + t.w / 2, y2: t.y + t.h - .17 })
+      : sv('line', { class: 'dt-mid', x1: t.x + .17, y1: t.y + t.h / 2, x2: t.x + t.w - .17, y2: t.y + t.h / 2 }));
+    for (const [cx, cy, n] of t.sq) {
+      for (const [px, py] of PIPS[n] || []) {
+        const [dx, dy] = t.o === 'h' ? [-py, px] : [px, py];
+        g.appendChild(sv('circle', { class: 'dt-pip', cx: cx + dx * .25, cy: cy + dy * .25, r: .09 }));
+      }
+    }
+    return g;
+  }
+  function domMini(a, c) {
+    const s = sv('svg', { viewBox: '0 0 1.06 2.1', 'aria-hidden': 'true', focusable: 'false' });
+    s.appendChild(domTileSvg({ x: 0, y: 0, w: 1, h: 2, o: 'v', sq: [[.5, .5, a], [.5, 1.5, c]] }));
+    return s;
+  }
+
+  // ترتيب الحجار على الطاولة: أول حجر بالنص، والطرف اليمين بيمشي لليمين ولما يوصل للحافة بينزل سطر وبيرجع،
+  // والطرف الشمال بيمشي للشمال وبيطلع لفوق. الدبل بينحط بالعرض. st = آخر حجر بالطرف ووين ماشي.
+  function domNext(st, dbl) {
+    let { row, hx, hy, turns } = st;
+    const r = st.rect;
+    if (hy === 0) {
+      const e = hx > 0 ? r.x + r.w : r.x;
+      if (Math.abs(e + hx * (dbl ? 1 : 2)) > domL + 1e-6) { hx = 0; hy = st.vy; turns = 0; } // ما بيساع: بنلفّ
+    }
+    let t;
+    if (hy === 0) {
+      const e = hx > 0 ? r.x + r.w : r.x;
+      if (dbl) {
+        const cx = e + hx * .5;
+        t = { x: cx - .5, y: st.oy - 1, w: 1, h: 2, o: 'v', sq: [[cx, st.oy - .5], [cx, st.oy + .5]], ox: cx, oy: st.oy };
+      } else {
+        const c1 = e + hx * .5, c2 = e + hx * 1.5;
+        t = { x: Math.min(c1, c2) - .5, y: st.oy - .5, w: 2, h: 1, o: 'h', sq: [[c1, st.oy], [c2, st.oy]], ox: c2, oy: st.oy };
+      }
+    } else {
+      // بالنزلة (أو الطلعة) حجرين واقفين، وبعدين بنرجع بالاتجاه المعاكس
+      const e = hy > 0 ? r.y + r.h : r.y;
+      const c1 = e + hy * .5, c2 = e + hy * 1.5;
+      t = { x: st.ox - .5, y: Math.min(c1, c2) - .5, w: 1, h: 2, o: 'v', sq: [[st.ox, c1], [st.ox, c2]], ox: st.ox, oy: c2 };
+      if (++turns >= 2) { row = -row; hx = row; hy = 0; }
+    }
+    return { t, st: { row, hx, hy, turns, vy: st.vy, rect: t, ox: t.ox, oy: t.oy } };
+  }
+  function domLayout(d) {
+    const [a, c] = d.first;
+    const dbl = a === c;
+    const first = dbl
+      ? { x: -.5, y: -1, w: 1, h: 2, o: 'v', sq: [[0, -.5, a], [0, .5, c]], key: 'F' }
+      : { x: -1, y: -.5, w: 2, h: 1, o: 'h', sq: [[-.5, 0, a], [.5, 0, c]], key: 'F' };
+    const tiles = [first], arms = {};
+    for (const [side, dir] of [['L', -1], ['R', 1]]) {
+      let st = { row: dir, hx: dir, hy: 0, turns: 0, vy: dir, rect: first, ox: dbl ? 0 : dir * .5, oy: 0 };
+      (side === 'L' ? d.left : d.right).forEach(([n, f], i) => {
+        const r = domNext(st, n === f);
+        r.t.sq[0].push(n); r.t.sq[1].push(f);
+        r.t.key = side + (i + 1);
+        tiles.push(r.t); st = r.st;
+      });
+      arms[side] = st;
+    }
+    return { tiles, arms };
+  }
+
+  function renderDomTable() {
+    const d = dom, svg = $('dom-svg');
+    domL = domNarrow.matches ? 6 : 7;
+    svg.replaceChildren();
+    const all = [];
+    if (d.first) {
+      const lay = domLayout(d);
+      const lk = d.last ? (d.last.side === 'F' ? 'F' : d.last.side + (d.last.side === 'L' ? d.left.length : d.right.length)) : '';
+      const key = d.round + ':' + lk;
+      const fresh = !domFresh && lk && key !== domLastKey; // آخر حجر نزل هلأ: بيطلع بحركة
+      domLastKey = key;
+      for (const t of lay.tiles) {
+        const g = domTileSvg(t);
+        if (fresh && t.key === lk) g.classList.add('new');
+        svg.appendChild(g); all.push(t);
+      }
+      // إذا الحجر بيركب على الطرفين، بنورجيك وين رح يقعد بكل طرف
+      const sel = domSelTile();
+      if (sel) {
+        const e = domEnds();
+        for (const side of domFits(sel)) {
+          const end = e[side], far = sel[0] === end ? sel[1] : sel[0];
+          const t = domNext(lay.arms[side], sel[0] === sel[1]).t;
+          t.sq[0].push(end); t.sq[1].push(far);
+          const g = domTileSvg(t);
+          g.classList.add('ghost');
+          g.dataset.side = side;
+          svg.appendChild(g); all.push(t);
+        }
+      }
+    }
+    domFresh = false;
+    let y0 = -4.5, y1 = 4.5;
+    for (const t of all) { y0 = Math.min(y0, t.y - .7); y1 = Math.max(y1, t.y + t.h + .7); }
+    const x0 = -domL - .6, w = domL * 2 + 1.2, h = y1 - y0;
+    svg.setAttribute('viewBox', x0 + ' ' + y0 + ' ' + w + ' ' + h);
+    svg.style.aspectRatio = w + ' / ' + h;
+
+    const mi = domMine();
+    let empty = '';
+    if (!d.first) {
+      if (d.phase === 'play') empty = domMyTurn() ? 'نزّل أي حجر من حجارك' : 'استنينا ' + d.seats[d.turn].name + ' ينزّل أول حجر';
+      else empty = 'الطاولة فاضية';
+    }
+    $('dom-empty').textContent = empty;
+    $('dom-empty').hidden = !empty;
+    svg.setAttribute('aria-label', d.first ? 'طاولة الدومينو، الطرفين: ' + domEnds().L + ' و' + domEnds().R : 'طاولة الدومينو فاضية');
+    return mi;
+  }
+  $('dom-svg').addEventListener('click', (e) => {
+    const g = e.target.closest('.ghost');
+    const t = domSelTile();
+    if (g && t) domPlay(t, g.dataset.side);
+  });
+
+  // حجار اللاعب الثاني: بظهرها وقت اللعب، ومكشوفة لما تخلص الجولة
+  function domHandRow(seat) {
+    const wrap = el('div', 'dom-hand-o');
+    wrap.appendChild(el('span', '', (isMe(seat) ? 'إنت' : seat.name) + ': ' + domCount(seat.count)));
+    const row = el('div', 'dom-backs');
+    if (seat.hand) for (const [a, c] of seat.hand) { const m = domMini(a, c); m.classList.add('dom-mini'); row.appendChild(m); }
+    else for (let i = 0; i < seat.count; i++) row.appendChild(el('span', 'dom-back'));
+    wrap.appendChild(row);
+    return wrap;
+  }
+  function renderDomBars(mi) {
+    const d = dom, started = d.phase !== 'idle' && d.seats.length === 2;
+    const top = started ? d.seats[mi >= 0 ? 1 - mi : 1] : null;
+    $('dom-top').replaceChildren(top ? domHandRow(top) : '');
+    const bottom = started && mi < 0 ? d.seats[0] : null; // للي بيتفرج: الثاني تحت
+    $('dom-bottom').replaceChildren(bottom ? domHandRow(bottom) : '');
+    $('dom-bottom').hidden = !bottom;
+    const pile = $('dom-pile');
+    pile.hidden = !started;
+    if (started) pile.replaceChildren(el('span', 'dom-back'), el('span', '', 'الكومة: ' + domCount(d.pile)));
+  }
+
+  function renderDomRack(mi) {
+    const d = dom, rack = $('dom-rack');
+    const focused = document.activeElement && document.activeElement.closest && document.activeElement.closest('.dom-tile');
+    const fk = focused ? focused.dataset.k : '';
+    const frag = document.createDocumentFragment();
+    if (mi >= 0 && d.hand && d.phase !== 'idle') {
+      const myTurn = domMyTurn();
+      for (const t of d.hand) {
+        const b = el('button', 'dom-tile');
+        b.type = 'button';
+        b.dataset.k = domKey(t);
+        const fits = myTurn && domFits(t).length > 0;
+        if (myTurn && d.phase === 'play') b.dataset.s = fits ? 'fit' : 'no';
+        b.setAttribute('aria-pressed', String(domSel === domKey(t)));
+        b.setAttribute('aria-label', 'حجر ' + t[0] + ' و' + t[1] + (myTurn && !fits ? '، ما بيركب' : ''));
+        b.appendChild(domMini(t[0], t[1]));
+        b.addEventListener('click', () => domPick(t));
+        frag.appendChild(b);
+      }
+    } else if (mi < 0 && d.seats.length && d.phase !== 'idle') {
+      frag.appendChild(el('span', 'chip', 'إنت بتتفرج'));
+    }
+    rack.replaceChildren(frag);
+    rack.hidden = !rack.childNodes.length;
+    if (fk) { const b = rack.querySelector('[data-k="' + fk + '"]') || rack.querySelector('.dom-tile'); if (b) b.focus(); }
+  }
+
+  function domPick(t) {
+    const d = dom;
+    if (!d || d.phase !== 'play') return;
+    const mi = domMine();
+    if (mi < 0) return;
+    if (d.turn !== mi) { flash('dom', 'مش دورك، استنى ' + d.seats[d.turn].name); return; }
+    const sides = domFits(t);
+    if (!sides.length) {
+      flash('dom', domCanPlay() ? 'هالحجر ما بيركب، جرّب غيره' : d.pile ? 'ما معك إشي بيركب، اسحب من الكومة' : 'ما معك إشي بيركب، مرّر الدور');
+      return;
+    }
+    const k = domKey(t);
+    if (domSel === k) { domSel = null; renderDom(); return; }
+    const e = domEnds();
+    // مكان واحد بس (أو الطرفين نفس الرقم): بينحط فوراً
+    if (sides.length === 1 || e.L === e.R) {
+      domPlay(t, sides.length === 1 ? sides[0] : (d.left.length <= d.right.length ? 'L' : 'R'));
+      return;
+    }
+    domSel = k;
+    renderDom();
+  }
+  function domPlay(t, side) {
+    domSel = null;
+    socket.emit('dom:play', { t, side });
+  }
+  for (const side of ['L', 'R']) {
+    $('dom-side-' + side).addEventListener('click', () => { const t = domSelTile(); if (t) domPlay(t, side); });
+  }
+  $('dom-draw').addEventListener('click', () => socket.emit('dom:draw'));
+  $('dom-pass').addEventListener('click', () => socket.emit('dom:pass'));
+  $('dom-start').addEventListener('click', () => {
+    socket.emit(dom && dom.phase === 'round' && domMine() >= 0 ? 'dom:next' : 'dom:start');
+  });
+  $('dom-yes').addEventListener('click', () => socket.emit('dom:answer', true));
+  $('dom-no').addEventListener('click', () => socket.emit('dom:answer', false));
+  $('dom-cancel').addEventListener('click', () => socket.emit('dom:cancel'));
+  domNarrow.addEventListener('change', () => { if (dom) renderDom(); });
+
+  function renderDomActions(mi) {
+    const d = dom;
+    const stuck = domMyTurn() && !domCanPlay();
+    $('dom-draw').hidden = !(stuck && d.pile > 0);
+    $('dom-pass').hidden = !(stuck && !d.pile);
+    const sel = domSelTile(), e = domEnds();
+    for (const side of ['L', 'R']) {
+      const b = $('dom-side-' + side);
+      b.hidden = !(sel && e);
+      if (sel && e) b.textContent = 'حطّه جنب ' + e[side];
+    }
+    const btn = $('dom-start');
+    btn.textContent = d.phase === 'play' ? 'ابدأ من جديد'
+      : d.phase === 'round' && mi >= 0 ? 'الجولة الجاية'
+        : d.phase === 'match' ? 'العب كمان مرة' : 'ابدأ اللعبة';
+    // اللي بيتفرج ما بيقدر يوقف لعبة شغالة
+    btn.hidden = mi < 0 && (d.phase === 'play' || d.phase === 'round') && d.seats.some((s) => s.here);
+    btn.disabled = !!(d.ask && isMe(d.ask));
+  }
+
+  function domStatus(mi) {
+    const d = dom;
+    if (askForMeIn(d)) return d.ask.name + ' بيسألك إذا إنت مستعد';
+    if (d.ask && isMe(d.ask)) return 'استنينا صاحبك يوافق…';
+    if (d.phase === 'idle') return 'اضغط «ابدأ اللعبة»، وأول ما صاحبك يوافق بتتوزّع الحجار';
+    if (d.phase === 'play') {
+      const t = d.seats[d.turn];
+      if (mi < 0) return 'دور ' + t.name + '، إنت بتتفرج';
+      if (d.turn !== mi) {
+        if (!t.here) return t.name + ' طلع، استنينا يرجع';
+        if (!d.first) return t.name + ' بيبلّش' + (d.why === 'double' ? '، معه أكبر دبل' : d.why === 'won' ? '، فاز بالجولة الماضية' : '');
+        return 'دور ' + t.name + '…';
+      }
+      if (!d.first) {
+        return d.why === 'double' ? 'معك أكبر دبل، إنت بتبلّش'
+          : d.why === 'tile' ? 'معك أكبر حجر، إنت بتبلّش'
+            : d.why === 'won' ? 'فزت بالجولة الماضية، إنت بتبلّش' : 'إنت بتبلّش هالجولة';
+      }
+      if (domSelTile()) return 'بيركب عالطرفين، اختار وين تحطه';
+      if (domCanPlay()) return 'دورك، اختار حجر';
+      return d.pile ? 'ما معك إشي بيركب، اسحب من الكومة' : 'ما معك إشي بيركب، مرّر الدور';
+    }
+    const r = d.result;
+    if (!r) return '';
+    const w = r.winner >= 0 ? d.seats[r.winner] : null;
+    if (d.phase === 'match' && w) {
+      return isMe(w) ? 'فزت باللعبة! 🎉 وصلت ' + w.score + ' نقطة' : 'فاز ' + w.name + ' باللعبة 🎉 وصل ' + w.score + ' نقطة';
+    }
+    if (r.blocked) {
+      if (!w) return 'الطاولة سكّرت وحجاركم متساوية، ما حدا أخذ إشي';
+      return 'الطاولة سكّرت! ' + (isMe(w) ? 'حجارك أقل، أخذت ' : w.name + ' حجاره أقل، أخذ ') + r.pts + ' نقطة';
+    }
+    return isMe(w) ? 'خلّصت حجارك! 🎉 أخذت ' + r.pts + ' نقطة' : w.name + ' خلّص حجاره وأخذ ' + r.pts + ' نقطة';
+  }
+
+  function renderDom() {
+    if (!dom) return;
+    const d = dom;
+    renderAskFor('dom', d, 'الدومينو');
+    const mi = renderDomTable();
+    renderDomBars(mi);
+    renderDomRack(mi);
+    renderDomActions(mi);
+    const seats = document.createDocumentFragment();
+    d.seats.forEach((s, i) => {
+      const li = el('li', 'person seat');
+      li.style.setProperty('--pc', DOM_SEAT_COLOR[i]);
+      if (d.phase === 'play' && d.turn === i) li.dataset.turn = '';
+      li.title = s.score + ' نقطة';
+      li.append(el('span', 'av', String(s.score)), el('span', '', (isMe(s) ? 'إنت' : s.name) + (s.here ? '' : ' (طلع)')));
+      seats.appendChild(li);
+    });
+    $('dom-seats').replaceChildren(seats);
+    $('dom-note').textContent = 'نزّل حجر رقمه زي واحد من طرفين الطاولة. اللي بيخلّص حجاره أول بياخد نقاط حجار صاحبه، وأول واحد بيوصل ' + d.target + ' بيفوز.';
+    const st = $('dom-status');
+    if (!st.classList.contains('warn')) st.textContent = domStatus(mi);
   }
 
   // ---------- ذاكرة الإيموجي ----------
@@ -2079,6 +2513,7 @@ canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block
     if (e.key === 'Escape') {
       if (closePicker()) emoBtn.focus();
       closeConfirm();
+      if (tab === 'dom' && domSel) { domSel = null; renderDom(); }
     }
     if (tab === 'snake' && snakeLive() && snakeMine() && !e.ctrlKey && !e.metaKey && !e.altKey) {
       const d = { ArrowUp: 'u', ArrowDown: 'd', ArrowLeft: 'l', ArrowRight: 'r' }[e.key] || { KeyW: 'u', KeyS: 'd', KeyA: 'l', KeyD: 'r' }[e.code];
